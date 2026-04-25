@@ -13,18 +13,12 @@ function initSync() {
     function connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const url = `${protocol}//${window.location.host}${pageData.baseURL}/api/sync`;
-        console.log(`[Todo Sync] Attempting to connect to ${url}`);
-        
         socket = new WebSocket(url);
 
-        socket.onopen = () => {
-            console.log(`[Todo Sync] Connected to ${url}`);
-            clearTimeout(reconnectTimer);
-        };
+        socket.onopen = () => clearTimeout(reconnectTimer);
 
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log(`[Todo Sync] Received update for ${data.key}`);
             
             // Only update if the incoming data is actually new
             if (localStorage.getItem(data.key) !== data.value) {
@@ -37,12 +31,7 @@ function initSync() {
             }
         };
 
-        socket.onerror = (error) => {
-            console.error(`[Todo Sync] WebSocket Error:`, error);
-        };
-
         socket.onclose = () => {
-            console.log(`[Todo Sync] Connection closed. Retrying in 3s...`);
             reconnectTimer = setTimeout(connect, 3000);
         };
     }
