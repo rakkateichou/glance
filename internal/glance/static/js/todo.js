@@ -152,7 +152,7 @@ function Todo(id) {
     };
 
     const onItemRepositioned = () => saveItems();
-    const debouncedOnItemUpdate = throttledDebounce(saveItems, 10, 1000);
+    const onItemUpdate = () => saveItems();
 
     const sync = () => {
         const newData = loadFromLocalStorage(id);
@@ -201,7 +201,7 @@ function Todo(id) {
 
     const newItem = (data) => Item(
         data,
-        debouncedOnItemUpdate,
+        onItemUpdate,
         onItemDelete,
         () => inputArea.focus(),
         onDragStart
