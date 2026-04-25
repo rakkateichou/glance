@@ -10,7 +10,6 @@ type countersWidget struct {
 	widgetBase `yaml:",inline"`
 	cachedHTML template.HTML `yaml:"-"`
 	Labels     []string      `yaml:"labels"`
-	Remote     string        `yaml:"remote"`
 }
 
 func (widget *countersWidget) initialize() error {

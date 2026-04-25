@@ -5,10 +5,12 @@ let socket;
 let reconnectTimer;
 let isInternalUpdate = false;
 
-function initSync(url) {
+function initSync() {
     if (socket) return;
 
     function connect() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const url = `${protocol}//${window.location.host}${pageData.baseURL}/api/sync`;
         socket = new WebSocket(url);
         socket.onopen = () => clearTimeout(reconnectTimer);
         socket.onmessage = (event) => {
@@ -28,11 +30,10 @@ function initSync(url) {
 }
 
 export default function(element) {
-    const { widgetId, remote } = element.dataset;
-    if (remote) initSync(remote);
+    const { widgetId: id } = element.dataset;
+    initSync();
 
     const labels = Array.from(element.querySelectorAll('.counter-row')).map(row => row.dataset.label);
-    const id = widgetId;
     
     element.innerHTML = '';
     element.append(Counters(id, labels));

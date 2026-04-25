@@ -10,7 +10,6 @@ type todoWidget struct {
 	widgetBase `yaml:",inline"`
 	cachedHTML template.HTML `yaml:"-"`
 	TodoID     string        `yaml:"id"`
-	Remote     string        `yaml:"remote"`
 }
 
 func (widget *todoWidget) initialize() error {

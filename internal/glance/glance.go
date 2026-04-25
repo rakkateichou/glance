@@ -227,6 +227,8 @@ func newApplication(c *config) (*application, error) {
 	}
 	app.parsedManifest = []byte(manifest)
 
+	globalSyncStore.load()
+
 	return app, nil
 }
 
@@ -449,6 +451,7 @@ func (a *application) server() (func() error, func() error) {
 	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	mux.HandleFunc("/api/sync", a.handleSyncWebSocket)
 
 	if a.RequiresAuth {
 		mux.HandleFunc("GET /login", a.handleLoginPageRequest)

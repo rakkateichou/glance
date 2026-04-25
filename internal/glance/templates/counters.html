@@ -1,7 +1,7 @@
 {{ template "widget-base.html" . }}
 
 {{ define "widget-content" }}
-<div class="counters" data-widget-id="{{ .ID }}" data-remote="{{ .Remote }}">
+<div class="counters" data-widget-id="{{ .ID }}">
     {{ range .Labels }}
     <div class="counter-row" data-label="{{ . }}"></div>
     {{ end }}

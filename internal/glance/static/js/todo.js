@@ -7,10 +7,12 @@ let socket;
 let reconnectTimer;
 let isInternalUpdate = false;
 
-function initSync(url) {
+function initSync() {
     if (socket) return;
 
     function connect() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const url = `${protocol}//${window.location.host}${pageData.baseURL}/api/sync`;
         socket = new WebSocket(url);
 
         socket.onopen = () => clearTimeout(reconnectTimer);
@@ -42,11 +44,9 @@ const trashIconSvg = `<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg
 </svg>`;
 
 export default function(element) {
-    const { todoId: id, remote } = element.dataset;
+    const { todoId: id } = element.dataset;
 
-    if (remote) {
-        initSync(remote); // Kick off the WebSocket connection
-    }
+    initSync(); // Kick off the WebSocket connection
 
     // Create a permanent container so we can destroy and rebuild the app inside it
     const wrapper = elem("div").classes("todo-live-wrapper");
