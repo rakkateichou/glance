@@ -14,6 +14,9 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Automatic Internal Synchronization:** Built-in WebSocket synchronization just like the To-do widget.
 - **Persistence:** Counter values are stored in the browser's local storage and automatically synced across devices.
 
+### Search Widget
+- **Direct URL Opening:** Added an `open-direct-url` flag that allows you to type a URL (like `google.com` or `https://ai.dev`) directly into the search box and open it instead of performing a web search.
+
 ## Configuration Examples
 
 ### To-do Widget
@@ -29,6 +32,13 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
     - Unit 1
     - Unit 2
     - Unit 3
+```
+
+### Search Widget
+```yaml
+- type: search
+  search-engine: duckduckgo
+  open-direct-url: true
 ```
 
 ## Data Persistence

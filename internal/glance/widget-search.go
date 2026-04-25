@@ -21,8 +21,9 @@ type searchWidget struct {
 	Bangs        []SearchBang  `yaml:"bangs"`
 	NewTab       bool          `yaml:"new-tab"`
 	Target       string        `yaml:"target"`
-	Autofocus    bool          `yaml:"autofocus"`
-	Placeholder  string        `yaml:"placeholder"`
+	Autofocus     bool          `yaml:"autofocus"`
+	Placeholder   string        `yaml:"placeholder"`
+	OpenDirectURL bool          `yaml:"open-direct-url"`
 }
 
 func convertSearchUrl(url string) string {

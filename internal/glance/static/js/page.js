@@ -108,6 +108,7 @@ function setupSearchBoxes() {
         const defaultSearchUrl = widget.dataset.defaultSearchUrl;
         const target = widget.dataset.target || "_blank";
         const newTab = widget.dataset.newTab === "true";
+        const openDirectURL = widget.dataset.openDirectUrl === "true";
         const inputElement = widget.getElementsByClassName("search-input")[0];
         const bangElement = widget.getElementsByClassName("search-bang")[0];
         const bangs = widget.querySelectorAll(".search-bangs > input");
@@ -143,7 +144,14 @@ function setupSearchBoxes() {
                     return;
                 }
 
-                const url = searchUrlTemplate.replace("!QUERY!", encodeURIComponent(query));
+                let url;
+                const urlPattern = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
+
+                if (openDirectURL && currentBang == null && urlPattern.test(query)) {
+                    url = query.includes("://") ? query : "http://" + query;
+                } else {
+                    url = searchUrlTemplate.replace("!QUERY!", encodeURIComponent(query));
+                }
 
                 if (newTab && !event.ctrlKey || !newTab && event.ctrlKey) {
                     window.open(url, target).focus();
