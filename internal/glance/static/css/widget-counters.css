@@ -13,8 +13,8 @@
 }
 
 .counter-label {
-    font-size: 0.9rem;
-    color: var(--color-text-primary);
+    font-size: var(--font-size-h4);
+    color: var(--color-text-base);
 }
 
 .counter-value {
