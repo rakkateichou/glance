@@ -4,6 +4,7 @@ go 1.24.3
 
 require (
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/shirou/gopsutil/v4 v4.25.4
 	github.com/tidwall/gjson v1.18.0
