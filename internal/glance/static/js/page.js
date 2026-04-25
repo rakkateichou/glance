@@ -119,6 +119,7 @@ function setupSearchBoxes() {
         const kbdElement = widget.getElementsByTagName("kbd")[0];
         let currentBang = null;
         let lastQuery = "";
+        let originalValue = "";
         let selectedIndex = -1;
         let suggestions = [];
 
@@ -145,6 +146,7 @@ function setupSearchBoxes() {
 
             lastQuery = query;
             inputElement.value = "";
+            originalValue = "";
             hideAutocomplete();
         };
 
@@ -156,15 +158,30 @@ function setupSearchBoxes() {
             }
 
             if (googleAutocomplete && suggestions.length > 0) {
-                if (event.key === "ArrowDown" || (event.key === "j" && event.ctrlKey)) {
+                const isDown = event.key === "ArrowDown" || (event.key === "j" && event.ctrlKey);
+                const isUp = event.key === "ArrowUp" || (event.key === "k" && event.ctrlKey);
+
+                if (isDown || isUp) {
                     event.preventDefault();
-                    selectedIndex = (selectedIndex + 1) % suggestions.length;
-                    updateSelection();
-                    return;
-                }
-                if (event.key === "ArrowUp" || (event.key === "k" && event.ctrlKey)) {
-                    event.preventDefault();
-                    selectedIndex = (selectedIndex - 1 + suggestions.length) % suggestions.length;
+
+                    if (selectedIndex === -1) {
+                        originalValue = inputElement.value;
+                    }
+
+                    if (isDown) {
+                        selectedIndex++;
+                        if (selectedIndex >= suggestions.length) selectedIndex = -1;
+                    } else {
+                        selectedIndex--;
+                        if (selectedIndex < -1) selectedIndex = suggestions.length - 1;
+                    }
+
+                    if (selectedIndex === -1) {
+                        inputElement.value = originalValue;
+                    } else {
+                        inputElement.value = suggestions[selectedIndex];
+                    }
+
                     updateSelection();
                     return;
                 }
