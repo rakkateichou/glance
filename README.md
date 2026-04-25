@@ -9,12 +9,26 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Smooth Updates:** Replaced the full-widget re-rendering logic with a reconciliation system that provides smooth, real-time animations for incoming updates (adds, deletes, and checkmark toggles).
 - **Two-way Sync:** Local changes are automatically broadcasted to the connected WebSocket server.
 
-## Configuration Example
+### Counters Widget
+- **List of Counters:** Allows tracking multiple units (e.g., university lectures) with simple +/- buttons.
+- **Remote Synchronization:** Supports the same `remote` WebSocket synchronization as the To-do widget.
+- **Persistence:** Counter values are stored in the browser's local storage and synced across devices.
 
-To enable remote synchronization for the to-do widget, add the `remote` field to your `glance.yml`:
+## Configuration Examples
 
+### To-do Widget
 ```yaml
 - type: to-do
   id: my-shared-tasks
+  remote: wss://your-glance-server/ws
+```
+
+### Counters Widget
+```yaml
+- type: counters
+  labels:
+    - Unit 1
+    - Unit 2
+    - Unit 3
   remote: wss://your-glance-server/ws
 ```

@@ -642,6 +642,15 @@ async function setupCalendars() {
         calendar.default(elems[i]);
 }
 
+async function setupCounters() {
+    const elems = Array.from(document.getElementsByClassName("counters"));
+    if (elems.length === 0) return;
+    const counters = await import ('./counters.js');
+    for (let i = 0; i < elems.length; i++) {
+        counters.default(elems[i]);
+    }
+}
+
 async function setupTodos() {
     const elems = Array.from(document.getElementsByClassName("todo"));
     if (elems.length == 0) return;
@@ -756,6 +765,7 @@ async function setupPage() {
         setupPopovers();
         setupClocks()
         await setupCalendars();
+        await setupCounters();
         await setupTodos();
         setupCarousels();
         setupSearchBoxes();
