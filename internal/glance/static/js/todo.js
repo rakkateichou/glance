@@ -2,14 +2,68 @@ import { elem, fragment } from "./templating.js";
 import { animateReposition } from "./animations.js";
 import { clamp, Vec2, toggleableEvents, throttledDebounce } from "./utils.js";
 
+// --- CUSTOM SYNC LOGIC ---
+let socket;
+let reconnectTimer;
+let isInternalUpdate = false;
+
+function initSync(url) {
+    if (socket) return;
+
+    function connect() {
+        socket = new WebSocket(url);
+
+        socket.onopen = () => clearTimeout(reconnectTimer);
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // Only update if the incoming data is actually new
+            if (localStorage.getItem(data.key) !== data.value) {
+                isInternalUpdate = true; // Lock our broadcast loop
+                localStorage.setItem(data.key, data.value);
+                isInternalUpdate = false; // Unlock
+                
+                // Yell at the specific widget to redraw itself
+                window.dispatchEvent(new CustomEvent('todo-sync', { detail: data.key }));
+            }
+        };
+
+        socket.onclose = () => {
+            reconnectTimer = setTimeout(connect, 3000);
+        };
+    }
+    connect();
+}
+// -------------------------
+
 const trashIconSvg = `<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
   <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clip-rule="evenodd" />
 </svg>`;
 
 export default function(element) {
-    element.swapWith(
-        Todo(element.dataset.todoId)
-    )
+    const { todoId: id, remote } = element.dataset;
+
+    if (remote) {
+        initSync(remote); // Kick off the WebSocket connection
+    }
+
+    // Create a permanent container so we can destroy and rebuild the app inside it
+    const wrapper = elem("div").classes("todo-live-wrapper");
+    element.swapWith(wrapper);
+
+    function mount() {
+        wrapper.html(""); // Obliterate the old widget instance
+        const dummyTarget = elem("div"); // Create a temporary anchor
+        wrapper.append(dummyTarget);
+        dummyTarget.swapWith(Todo(id)); // Let the templating engine render the fresh list
+    }
+
+    // Initial render on page load
+    mount();
+
+    // Listen ONLY for updates to this specific widget's ID
+    // Note: Todo(id) now handles its own internal syncing smoothly
 }
 
 function itemAnim(height, entrance = true) {
@@ -42,11 +96,18 @@ function loadFromLocalStorage(id) {
 }
 
 function saveToLocalStorage(id, data) {
-    localStorage.setItem(`todo-${id}`, JSON.stringify(data));
+    const key = `todo-${id}`;
+    const value = JSON.stringify(data);
+    localStorage.setItem(key, value);
+
+    // If this save was triggered by the user (not an incoming socket message), broadcast it
+    if (!isInternalUpdate && socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ key, value }));
+    }
 }
 
 function Item(unserialize = {}, onUpdate, onDelete, onEscape, onDragStart) {
-    let item, input, inputArea;
+    let item, input, inputArea, checkbox;
 
     const serializeable = {
         text: unserialize.text || "",
@@ -54,7 +115,7 @@ function Item(unserialize = {}, onUpdate, onDelete, onEscape, onDragStart) {
     };
 
     item = elem().classes("todo-item", "flex", "gap-10", "items-center").append(
-        elem("input")
+        checkbox = elem("input")
             .classes("todo-item-checkbox", "shrink-0")
             .styles({ marginTop: "-0.1rem" })
             .attrs({ type: "checkbox" })
@@ -97,7 +158,17 @@ function Item(unserialize = {}, onUpdate, onDelete, onEscape, onDragStart) {
     input.component.setValue(serializeable.text);
     return item.component({
         focusInput: () => inputArea.focus(),
-        serialize: () => serializeable
+        serialize: () => serializeable,
+        update: (data) => {
+            if (serializeable.text !== data.text) {
+                serializeable.text = data.text;
+                input.component.setValue(data.text);
+            }
+            if (serializeable.checked !== data.checked) {
+                serializeable.checked = data.checked;
+                checkbox.checked = data.checked;
+            }
+        }
     });
 }
 
@@ -124,14 +195,45 @@ function Todo(id) {
     const onItemRepositioned = () => saveItems();
     const debouncedOnItemUpdate = throttledDebounce(saveItems, 10, 1000);
 
-    const onItemDelete = (item) => {
+    const sync = () => {
+        const newData = loadFromLocalStorage(id);
+        const currentItems = [...items.children];
+
+        newData.forEach((data, i) => {
+            if (currentItems[i]) {
+                currentItems[i].component.update(data);
+            } else {
+                const item = newItem(data);
+                items.append(item);
+                const height = item.clientHeight;
+                item.animate(itemAnim(height));
+            }
+        });
+
+        if (currentItems.length > newData.length) {
+            currentItems.slice(newData.length).forEach(item => {
+                onItemDelete(item, false);
+            });
+        }
+
+        if (items.children.length > 0)
+            inputContainer.classes("margin-bottom-15");
+        else
+            inputContainer.clearClasses("margin-bottom-15");
+    };
+
+    window.addEventListener('todo-sync', (e) => {
+        if (e.detail === `todo-${id}`) sync();
+    });
+
+    const onItemDelete = (item, shouldSave = true) => {
         if (lastAddedItem === item) lastAddedItem = null;
         const height = item.clientHeight;
         queuedForRemoval++;
         item.animate(itemAnim(height, false), () => {
             item.remove();
             queuedForRemoval--;
-            saveItems();
+            if (shouldSave) saveItems();
         });
 
         if (items.children.length - queuedForRemoval === 0)
