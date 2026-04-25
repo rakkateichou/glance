@@ -30,3 +30,16 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
     - Unit 2
     - Unit 3
 ```
+
+## Data Persistence
+
+To ensure your to-do lists and counters are saved when running via Docker, you must mount a volume for the `/app/data` directory:
+
+```yaml
+services:
+  glance:
+    # ... other config ...
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data  # This ensures your sync data is persisted
+```
