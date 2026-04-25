@@ -1,38 +1,9 @@
 import { elem, fragment } from "./templating.js";
 import { throttledDebounce } from "./utils.js";
-
-let socket;
-let reconnectTimer;
-let isInternalUpdate = false;
-
-function initSync() {
-    if (socket) return;
-
-    function connect() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const url = `${protocol}//${window.location.host}${pageData.baseURL}/api/sync`;
-        socket = new WebSocket(url);
-        socket.onopen = () => clearTimeout(reconnectTimer);
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            if (localStorage.getItem(data.key) !== data.value) {
-                isInternalUpdate = true;
-                localStorage.setItem(data.key, data.value);
-                isInternalUpdate = false;
-                window.dispatchEvent(new CustomEvent('counters-sync', { detail: data.key }));
-            }
-        };
-        socket.onclose = () => {
-            reconnectTimer = setTimeout(connect, 3000);
-        };
-    }
-    connect();
-}
+import { subscribe, broadcast } from "./sync.js";
 
 export default function(element) {
     const { widgetId: id } = element.dataset;
-    initSync();
-
     const labels = Array.from(element.querySelectorAll('.counter-row')).map(row => row.dataset.label);
     
     element.innerHTML = '';
@@ -47,9 +18,7 @@ function Counters(id, labels) {
     const saveData = (data) => {
         const value = JSON.stringify(data);
         localStorage.setItem(storageKey, value);
-        if (!isInternalUpdate && socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ key: storageKey, value }));
-        }
+        broadcast(storageKey, value);
     };
 
     const counters = {};
@@ -69,8 +38,8 @@ function Counters(id, labels) {
         container.append(row);
     });
 
-    window.addEventListener('counters-sync', (e) => {
-        if (e.detail === storageKey) {
+    const unsubscribe = subscribe((key) => {
+        if (key === storageKey) {
             const freshData = loadData();
             labels.forEach(label => {
                 counters[label].component.setValue(freshData[label] || 0);

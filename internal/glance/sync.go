@@ -77,6 +77,11 @@ func (a *application) handleSyncWebSocket(w http.ResponseWriter, r *http.Request
 			break
 		}
 
+		// Handle heartbeat ping
+		if msg.Key == "" && msg.Value == "" {
+			continue
+		}
+
 		s.mu.Lock()
 		s.data[msg.Key] = msg.Value
 		s.save()

@@ -1,43 +1,7 @@
 import { elem, fragment } from "./templating.js";
 import { animateReposition } from "./animations.js";
 import { clamp, Vec2, toggleableEvents, throttledDebounce } from "./utils.js";
-
-// --- CUSTOM SYNC LOGIC ---
-let socket;
-let reconnectTimer;
-let isInternalUpdate = false;
-
-function initSync() {
-    if (socket) return;
-
-    function connect() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const url = `${protocol}//${window.location.host}${pageData.baseURL}/api/sync`;
-        socket = new WebSocket(url);
-
-        socket.onopen = () => clearTimeout(reconnectTimer);
-
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            // Only update if the incoming data is actually new
-            if (localStorage.getItem(data.key) !== data.value) {
-                isInternalUpdate = true; // Lock our broadcast loop
-                localStorage.setItem(data.key, data.value);
-                isInternalUpdate = false; // Unlock
-                
-                // Yell at the specific widget to redraw itself
-                window.dispatchEvent(new CustomEvent('todo-sync', { detail: data.key }));
-            }
-        };
-
-        socket.onclose = () => {
-            reconnectTimer = setTimeout(connect, 3000);
-        };
-    }
-    connect();
-}
-// -------------------------
+import { subscribe, broadcast } from "./sync.js";
 
 const trashIconSvg = `<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
   <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clip-rule="evenodd" />
@@ -45,8 +9,6 @@ const trashIconSvg = `<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg
 
 export default function(element) {
     const { todoId: id } = element.dataset;
-
-    initSync(); // Kick off the WebSocket connection
 
     // Create a permanent container so we can destroy and rebuild the app inside it
     const wrapper = elem("div").classes("todo-live-wrapper");
@@ -100,10 +62,7 @@ function saveToLocalStorage(id, data) {
     const value = JSON.stringify(data);
     localStorage.setItem(key, value);
 
-    // If this save was triggered by the user (not an incoming socket message), broadcast it
-    if (!isInternalUpdate && socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ key, value }));
-    }
+    broadcast(key, value);
 }
 
 function Item(unserialize = {}, onUpdate, onDelete, onEscape, onDragStart) {
@@ -222,8 +181,8 @@ function Todo(id) {
             inputContainer.clearClasses("margin-bottom-15");
     };
 
-    window.addEventListener('todo-sync', (e) => {
-        if (e.detail === `todo-${id}`) sync();
+    const unsubscribe = subscribe((key) => {
+        if (key === `todo-${id}`) sync();
     });
 
     const onItemDelete = (item, shouldSave = true) => {

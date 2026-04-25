@@ -2,6 +2,7 @@ import { setupPopovers } from './popover.js';
 import { setupMasonries } from './masonry.js';
 import { throttledDebounce, isElementVisible, openURLInNewTab } from './utils.js';
 import { elem, find, findAll } from './templating.js';
+import { initSync } from './sync.js';
 
 async function fetchPageContent(pageData) {
     // TODO: handle non 200 status codes/time outs
@@ -754,6 +755,7 @@ function initThemePicker() {
 
 async function setupPage() {
     initThemePicker();
+    initSync(pageData.baseURL);
 
     const pageElement = document.getElementById("page");
     const pageContentElement = document.getElementById("page-content");
