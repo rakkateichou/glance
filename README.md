@@ -16,6 +16,9 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 
 ### Search Widget
 - **Direct URL Opening:** Added an `open-direct-url` flag that allows you to type a URL (like `google.com` or `https://ai.dev`) directly into the search box and open it instead of performing a web search.
+- **Google Autocomplete:** Added support for real-time Google search suggestions. Can be enabled via the `google-autocomplete: true` flag in the widget configuration.
+- **Customizable Limit:** Added `google-autocomplete-limit: <number>` to control how many suggestions are shown (removes scrolling).
+- **Keyboard Navigation:** Support for Arrow keys (or Ctrl+j/k) to navigate suggestions and Enter to search.
 
 ## Configuration Examples
 
@@ -37,8 +40,10 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 ### Search Widget
 ```yaml
 - type: search
-  search-engine: duckduckgo
+  search-engine: google
   open-direct-url: true
+  google-autocomplete: true
+  google-autocomplete-limit: 5
 ```
 
 ## Data Persistence

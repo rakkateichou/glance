@@ -2,11 +2,11 @@ export function throttledDebounce(callback, maxDebounceTimes, debounceDelay) {
     let debounceTimeout;
     let timesDebounced = 0;
 
-    return function () {
+    return function (...args) {
         if (timesDebounced == maxDebounceTimes) {
             clearTimeout(debounceTimeout);
             timesDebounced = 0;
-            callback();
+            callback(...args);
             return;
         }
 
@@ -15,7 +15,7 @@ export function throttledDebounce(callback, maxDebounceTimes, debounceDelay) {
 
         debounceTimeout = setTimeout(() => {
             timesDebounced = 0;
-            callback();
+            callback(...args);
         }, debounceDelay);
     };
 };

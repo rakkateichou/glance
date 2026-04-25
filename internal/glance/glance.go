@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -452,6 +454,7 @@ func (a *application) server() (func() error, func() error) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/api/sync", a.handleSyncWebSocket)
+	mux.HandleFunc("GET /api/autocomplete", a.handleAutocompleteProxy)
 
 	if a.RequiresAuth {
 		mux.HandleFunc("GET /login", a.handleLoginPageRequest)
@@ -516,4 +519,23 @@ func (a *application) server() (func() error, func() error) {
 	}
 
 	return start, stop
+}
+
+func (a *application) handleAutocompleteProxy(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		w.Write([]byte("[]"))
+		return
+	}
+
+	googleURL := fmt.Sprintf("https://suggestqueries.google.com/complete/search?client=firefox&q=%s", url.QueryEscape(query))
+	resp, err := http.Get(googleURL)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	io.Copy(w, resp.Body)
 }

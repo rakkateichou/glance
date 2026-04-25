@@ -77,3 +77,72 @@
 .search-bang:empty {
     display: none;
 }
+
+/* --- Autocomplete --- */
+
+.search-autocomplete-results {
+    position: absolute;
+    top: 100%;
+    left: -1px;
+    right: -1px;
+    background: var(--color-widget-background);
+    border: 1px solid var(--color-widget-content-border);
+    border-top: none;
+    border-bottom-left-radius: var(--border-radius);
+    border-bottom-right-radius: var(--border-radius);
+    box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    transition: border-color .2s;
+}
+
+.search:focus-within .search-autocomplete-results {
+    border-color: var(--color-primary);
+}
+
+.search-autocomplete-results:not(.hidden) {
+    animation: searchAutocompleteEntrance 0.15s ease-out forwards;
+}
+
+@keyframes searchAutocompleteEntrance {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.search-autocomplete-results.hidden {
+    display: none;
+}
+
+.search-autocomplete-item {
+    padding: 0.8rem 1.2rem;
+    cursor: pointer;
+    font-size: var(--font-size-h4);
+    color: var(--color-text-primary);
+    transition: background 0.1s, color 0.1s, padding-left 0.2s;
+    animation: searchAutocompleteItemEntrance 0.2s ease-out backwards;
+}
+
+@keyframes searchAutocompleteItemEntrance {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+}
+
+.search-autocomplete-item:hover, .search-autocomplete-item.selected {
+    background: var(--color-background-hover);
+    color: var(--color-text-highlight);
+    padding-left: 1.6rem;
+}
+
+/* Adjust the search box when results are shown */
+.search:has(.search-autocomplete-results:not(.hidden)) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+

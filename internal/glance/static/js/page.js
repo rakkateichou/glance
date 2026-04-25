@@ -109,26 +109,73 @@ function setupSearchBoxes() {
         const target = widget.dataset.target || "_blank";
         const newTab = widget.dataset.newTab === "true";
         const openDirectURL = widget.dataset.openDirectUrl === "true";
+        const googleAutocomplete = widget.dataset.googleAutocomplete === "true";
+        const googleAutocompleteLimit = parseInt(widget.dataset.googleAutocompleteLimit) || 0;
         const inputElement = widget.getElementsByClassName("search-input")[0];
         const bangElement = widget.getElementsByClassName("search-bang")[0];
+        const resultsElement = widget.getElementsByClassName("search-autocomplete-results")[0];
         const bangs = widget.querySelectorAll(".search-bangs > input");
         const bangsMap = {};
         const kbdElement = widget.getElementsByTagName("kbd")[0];
         let currentBang = null;
         let lastQuery = "";
+        let selectedIndex = -1;
+        let suggestions = [];
 
         for (let j = 0; j < bangs.length; j++) {
             const bang = bangs[j];
             bangsMap[bang.dataset.shortcut] = bang;
         }
 
+        const performSearch = (query, template, ctrlKey) => {
+            let url;
+            const urlPattern = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
+
+            if (openDirectURL && currentBang == null && urlPattern.test(query)) {
+                url = query.includes("://") ? query : "http://" + query;
+            } else {
+                url = template.replace("!QUERY!", encodeURIComponent(query));
+            }
+
+            if (newTab && !ctrlKey || !newTab && ctrlKey) {
+                window.open(url, target).focus();
+            } else {
+                window.location.href = url;
+            }
+
+            lastQuery = query;
+            inputElement.value = "";
+            hideAutocomplete();
+        };
+
         const handleKeyDown = (event) => {
             if (event.key == "Escape") {
                 inputElement.blur();
+                hideAutocomplete();
                 return;
             }
 
+            if (googleAutocomplete && suggestions.length > 0) {
+                if (event.key === "ArrowDown" || (event.key === "j" && event.ctrlKey)) {
+                    event.preventDefault();
+                    selectedIndex = (selectedIndex + 1) % suggestions.length;
+                    updateSelection();
+                    return;
+                }
+                if (event.key === "ArrowUp" || (event.key === "k" && event.ctrlKey)) {
+                    event.preventDefault();
+                    selectedIndex = (selectedIndex - 1 + suggestions.length) % suggestions.length;
+                    updateSelection();
+                    return;
+                }
+            }
+
             if (event.key == "Enter") {
+                if (googleAutocomplete && selectedIndex >= 0) {
+                    performSearch(suggestions[selectedIndex], defaultSearchUrl, event.ctrlKey);
+                    return;
+                }
+
                 const input = inputElement.value.trim();
                 let query;
                 let searchUrlTemplate;
@@ -144,32 +191,89 @@ function setupSearchBoxes() {
                     return;
                 }
 
-                let url;
-                const urlPattern = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
-
-                if (openDirectURL && currentBang == null && urlPattern.test(query)) {
-                    url = query.includes("://") ? query : "http://" + query;
-                } else {
-                    url = searchUrlTemplate.replace("!QUERY!", encodeURIComponent(query));
-                }
-
-                if (newTab && !event.ctrlKey || !newTab && event.ctrlKey) {
-                    window.open(url, target).focus();
-                } else {
-                    window.location.href = url;
-                }
-
-                lastQuery = query;
-                inputElement.value = "";
-
+                performSearch(query, searchUrlTemplate, event.ctrlKey);
                 return;
             }
 
-            if (event.key == "ArrowUp" && lastQuery.length > 0) {
+            if (event.key == "ArrowUp" && lastQuery.length > 0 && (!googleAutocomplete || suggestions.length === 0)) {
                 inputElement.value = lastQuery;
                 return;
             }
         };
+
+        const updateSelection = () => {
+            const items = resultsElement.getElementsByClassName("search-autocomplete-item");
+            for (let i = 0; i < items.length; i++) {
+                items[i].classList.toggle("selected", i === selectedIndex);
+            }
+        };
+
+        const hideAutocomplete = () => {
+            resultsElement.classList.add("hidden");
+            suggestions = [];
+            selectedIndex = -1;
+        };
+
+        const showAutocomplete = (data) => {
+            const newSuggestions = data[1];
+            const limitedSuggestions = googleAutocompleteLimit > 0 ? newSuggestions.slice(0, googleAutocompleteLimit) : newSuggestions;
+
+            if (JSON.stringify(suggestions) === JSON.stringify(limitedSuggestions)) {
+                return;
+            }
+
+            const currentDOMItems = Array.from(resultsElement.getElementsByClassName("search-autocomplete-item"));
+            
+            limitedSuggestions.forEach((suggestion, i) => {
+                if (currentDOMItems[i]) {
+                    // Update existing item only if text changed
+                    if (currentDOMItems[i].textContent !== suggestion) {
+                        currentDOMItems[i].textContent = suggestion;
+                        // Reset animation so it only plays when text actually changes
+                        currentDOMItems[i].style.animation = 'none';
+                        currentDOMItems[i].offsetHeight; // trigger reflow
+                        currentDOMItems[i].style.animation = null;
+                    }
+                } else {
+                    // Append new item
+                    const item = elem("div").classes("search-autocomplete-item").text(suggestion);
+                    item.styles({ animationDelay: `${i * 30}ms` });
+                    item.addEventListener("click", (e) => {
+                        performSearch(suggestion, defaultSearchUrl, e.ctrlKey);
+                    });
+                    resultsElement.append(item);
+                }
+            });
+
+            // Clean up extra items
+            if (currentDOMItems.length > limitedSuggestions.length) {
+                currentDOMItems.slice(limitedSuggestions.length).forEach(item => item.remove());
+            }
+
+            suggestions = limitedSuggestions;
+            if (suggestions.length === 0) {
+                hideAutocomplete();
+                return;
+            }
+
+            resultsElement.classList.remove("hidden");
+            selectedIndex = -1;
+            updateSelection();
+        };
+
+        const fetchSuggestions = throttledDebounce(async (query) => {
+            if (!query) {
+                hideAutocomplete();
+                return;
+            }
+            try {
+                const response = await fetch(`${pageData.baseURL}/api/autocomplete?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                showAutocomplete(data);
+            } catch (e) {
+                console.error("Autocomplete error:", e);
+            }
+        }, 5, 200);
 
         const changeCurrentBang = (bang) => {
             currentBang = bang;
@@ -177,7 +281,14 @@ function setupSearchBoxes() {
         }
 
         const handleInput = (event) => {
-            const value = event.target.value.trim();
+            const value = inputElement.value.trim();
+            
+            if (googleAutocomplete && !currentBang) {
+                fetchSuggestions(value);
+            } else {
+                hideAutocomplete();
+            }
+
             if (value in bangsMap) {
                 changeCurrentBang(bangsMap[value]);
                 return;
@@ -773,12 +884,12 @@ async function setupPage() {
 
     try {
         setupPopovers();
-        setupClocks()
+        setupClocks();
+        setupSearchBoxes();
+        setupCarousels();
         await setupCalendars();
         await setupCounters();
         await setupTodos();
-        setupCarousels();
-        setupSearchBoxes();
         setupCollapsibleLists();
         setupCollapsibleGrids();
         setupGroups();
