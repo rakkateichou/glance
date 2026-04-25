@@ -312,6 +312,23 @@ function setupSearchBoxes() {
             document.removeEventListener("input", handleInput);
         });
 
+        // Robust native autofocus fix
+        if (inputElement.hasAttribute("autofocus")) {
+            const focus = () => {
+                inputElement.focus();
+                // Ensure we "win" the focus battle if other scripts/transitions are running
+                setTimeout(() => inputElement.focus(), 10);
+            };
+            
+            // If the element is already visible, focus it. 
+            // Otherwise, wait for the content-ready transition.
+            if (isElementVisible(inputElement)) {
+                focus();
+            } else {
+                afterContentReady(focus);
+            }
+        }
+
         document.addEventListener("keydown", (event) => {
             if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
             if (event.code != "KeyS") return;

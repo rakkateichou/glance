@@ -19,6 +19,7 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Google Autocomplete:** Added support for real-time Google search suggestions. Can be enabled via the `google-autocomplete: true` flag in the widget configuration.
 - **Customizable Limit:** Added `google-autocomplete-limit: <number>` to control how many suggestions are shown (removes scrolling).
 - **Keyboard Navigation:** Support for Arrow keys (or Ctrl+j/k) to navigate suggestions and Enter to search.
+- **Improved Autofocus:** Rewrote the autofocus logic to be robust against dynamic page loads and transitions, ensuring the search bar is focused reliably.
 
 ## Configuration Examples
 
