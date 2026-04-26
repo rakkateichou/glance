@@ -329,16 +329,23 @@ function setupSearchBoxes() {
                 hideAutocomplete();
                 return;
             }
+
+            // INSTANT: Show history matches immediately while waiting for network
+            if (searchHistoryEnabled) {
+                showAutocomplete([query, []]); 
+            }
+
             try {
-                if (!googleAutocomplete) {
-                    showAutocomplete([query, []]);
-                    return;
-                }
+                if (!googleAutocomplete) return;
+
                 const response = await fetch(`${pageData.baseURL}/api/autocomplete?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
-                showAutocomplete(data);
+                
+                // Ensure we are still showing results for the current input
+                if (inputElement.value.trim() === data[0]) {
+                    showAutocomplete(data);
+                }
             } catch (e) {
-                if (searchHistoryEnabled) showAutocomplete([query, []]);
                 console.error("Autocomplete error:", e);
             }
         }, 5, 200);
