@@ -470,6 +470,7 @@ func (a *application) server() (func() error, func() error) {
 	})
 	mux.HandleFunc("/api/sync", a.handleSyncWebSocket)
 	mux.HandleFunc("GET /api/autocomplete", a.handleAutocompleteProxy)
+	mux.HandleFunc("GET /sw.js", a.handleServiceWorker)
 
 	if a.RequiresAuth {
 		mux.HandleFunc("GET /login", a.handleLoginPageRequest)
@@ -553,4 +554,15 @@ func (a *application) handleAutocompleteProxy(w http.ResponseWriter, r *http.Req
 
 	w.Header().Set("Content-Type", "application/json")
 	io.Copy(w, resp.Body)
+}
+
+func (a *application) handleServiceWorker(w http.ResponseWriter, r *http.Request) {
+	contents, err := readAllFromStaticFS("sw.js")
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/javascript")
+	w.Write(contents)
 }

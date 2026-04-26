@@ -916,9 +916,23 @@ function initThemePicker() {
     })
 }
 
+async function setupServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        try {
+            const registration = await navigator.serviceWorker.register(`${pageData.baseURL}/sw.js`, {
+                scope: `${pageData.baseURL}/`
+            });
+            console.log('[PWA] Service Worker registered with scope:', registration.scope);
+        } catch (error) {
+            console.error('[PWA] Service Worker registration failed:', error);
+        }
+    }
+}
+
 async function setupPage() {
     initThemePicker();
     initSync(pageData.baseURL);
+    setupServiceWorker();
 
     const pageElement = document.getElementById("page");
     const pageContentElement = document.getElementById("page-content");

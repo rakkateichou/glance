@@ -23,6 +23,7 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 
 ### Performance
 - **Server-Side Rendering (SSR):** Implemented initial page rendering on the server. This eliminates the "empty shell" loading state and secondary network fetch, making page loads feel instantaneous (ideal for New Tab use).
+- **PWA / Offline Support:** Added a Service Worker (`sw.js`) that caches all UI assets (CSS, JS, manifest). This allows Glance to load from the local disk instead of the network, achieving "extension-level" startup speeds.
 
 ## Configuration Examples
 
