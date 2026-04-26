@@ -320,14 +320,24 @@ function setupSearchBoxes() {
             changeCurrentBang(null);
         };
 
-        inputElement.addEventListener("focus", () => {
+        const attachListeners = () => {
             document.addEventListener("keydown", handleKeyDown);
-            document.addEventListener("input", handleInput);
-        });
-        inputElement.addEventListener("blur", () => {
+            inputElement.addEventListener("input", handleInput);
+        };
+
+        const detachListeners = () => {
             document.removeEventListener("keydown", handleKeyDown);
-            document.removeEventListener("input", handleInput);
-        });
+            inputElement.removeEventListener("input", handleInput);
+        };
+
+        inputElement.addEventListener("focus", attachListeners);
+        inputElement.addEventListener("blur", detachListeners);
+
+        // If the element is already focused (e.g. via browser native autofocus with SSR),
+        // we need to attach the listeners immediately.
+        if (document.activeElement === inputElement) {
+            attachListeners();
+        }
 
         // Robust native autofocus fix
         if (inputElement.hasAttribute("autofocus")) {
