@@ -139,6 +139,11 @@
     padding-left: 1.6rem;
 }
 
+.search-history-item {
+    text-decoration: underline dashed 1px var(--color-text-subdue);
+    text-underline-offset: 4px;
+}
+
 /* Adjust the search box when results are shown */
 .search:has(.search-autocomplete-results:not(.hidden)) {
     border-bottom-left-radius: 0;

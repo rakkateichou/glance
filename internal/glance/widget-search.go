@@ -26,6 +26,7 @@ type searchWidget struct {
 	OpenDirectURL bool          `yaml:"open-direct-url"`
 	GoogleAutocomplete bool     `yaml:"google-autocomplete"`
 	AutocompleteLimit int       `yaml:"google-autocomplete-limit"`
+	SearchHistory     bool      `yaml:"search-history"`
 }
 
 func convertSearchUrl(url string) string {

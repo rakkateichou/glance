@@ -2,7 +2,7 @@ import { setupPopovers } from './popover.js';
 import { setupMasonries } from './masonry.js';
 import { throttledDebounce, isElementVisible, openURLInNewTab } from './utils.js';
 import { elem, find, findAll } from './templating.js';
-import { initSync } from './sync.js';
+import { initSync, subscribe, broadcast } from './sync.js';
 
 async function fetchPageContent(pageData) {
     // TODO: handle non 200 status codes/time outs
@@ -111,6 +111,7 @@ function setupSearchBoxes() {
         const openDirectURL = widget.dataset.openDirectUrl === "true";
         const googleAutocomplete = widget.dataset.googleAutocomplete === "true";
         const googleAutocompleteLimit = parseInt(widget.dataset.googleAutocompleteLimit) || 0;
+        const searchHistoryEnabled = widget.dataset.searchHistory === "true";
         const inputElement = widget.getElementsByClassName("search-input")[0];
         const bangElement = widget.getElementsByClassName("search-bang")[0];
         const resultsElement = widget.getElementsByClassName("search-autocomplete-results")[0];
@@ -128,26 +129,53 @@ function setupSearchBoxes() {
             bangsMap[bang.dataset.shortcut] = bang;
         }
 
+        // --- History Helpers ---
+        const getHistory = () => {
+            try {
+                return JSON.parse(localStorage.getItem('search-history') || "[]");
+            } catch (e) {
+                return [];
+            }
+        };
+        const saveToHistory = (query) => {
+            try {
+                let history = getHistory();
+                history = [query, ...history.filter(h => h !== query)].slice(0, 50);
+                localStorage.setItem('search-history', JSON.stringify(history));
+                broadcast('search-history', JSON.stringify(history));
+            } catch (e) {
+                // Silently ignore storage errors
+            }
+        };
+        // -----------------------
+
         const performSearch = (query, template, ctrlKey) => {
             let url;
             const urlPattern = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
 
-            if (openDirectURL && currentBang == null && urlPattern.test(query)) {
-                url = query.includes("://") ? query : "http://" + query;
+            const q = query.trim();
+            if (q.length === 0 && currentBang == null) return;
+
+            // Save to history if enabled
+            if (searchHistoryEnabled && q.length > 0) {
+                saveToHistory(q);
+            }
+
+            if (openDirectURL && currentBang == null && urlPattern.test(q)) {
+                url = q.includes("://") ? query : "http://" + query;
             } else {
-                url = template.replace("!QUERY!", encodeURIComponent(query));
+                url = template.replace("!QUERY!", encodeURIComponent(q));
             }
 
             if (newTab && !ctrlKey || !newTab && ctrlKey) {
                 window.open(url, target).focus();
+                lastQuery = q;
+                inputElement.value = "";
+                originalValue = "";
+                hideAutocomplete();
             } else {
                 window.location.href = url;
             }
-
-            lastQuery = query;
-            inputElement.value = "";
-            originalValue = "";
-            hideAutocomplete();
         };
 
         const handleKeyDown = (event) => {
@@ -204,9 +232,6 @@ function setupSearchBoxes() {
                     query = input;
                     searchUrlTemplate = defaultSearchUrl;
                 }
-                if (query.length == 0 && currentBang == null) {
-                    return;
-                }
 
                 performSearch(query, searchUrlTemplate, event.ctrlKey);
                 return;
@@ -232,8 +257,21 @@ function setupSearchBoxes() {
         };
 
         const showAutocomplete = (data) => {
-            const newSuggestions = data[1];
-            const limitedSuggestions = googleAutocompleteLimit > 0 ? newSuggestions.slice(0, googleAutocompleteLimit) : newSuggestions;
+            const googleSuggestions = data[1] || [];
+            let historySuggestions = [];
+
+            if (searchHistoryEnabled) {
+                const history = getHistory();
+                const query = inputElement.value.trim().toLowerCase();
+                if (query) {
+                    historySuggestions = history.filter(h => 
+                        h.toLowerCase().includes(query) && !googleSuggestions.includes(h)
+                    ).slice(0, 3);
+                }
+            }
+
+            const combinedSuggestions = [...historySuggestions, ...googleSuggestions];
+            const limitedSuggestions = googleAutocompleteLimit > 0 ? combinedSuggestions.slice(0, googleAutocompleteLimit) : combinedSuggestions;
 
             if (JSON.stringify(suggestions) === JSON.stringify(limitedSuggestions)) {
                 return;
@@ -242,21 +280,29 @@ function setupSearchBoxes() {
             const currentDOMItems = Array.from(resultsElement.getElementsByClassName("search-autocomplete-item"));
             
             limitedSuggestions.forEach((suggestion, i) => {
+                const isHistory = historySuggestions.includes(suggestion);
                 if (currentDOMItems[i]) {
-                    // Update existing item only if text changed
-                    if (currentDOMItems[i].textContent !== suggestion) {
+                    // Update existing item
+                    if (currentDOMItems[i].textContent !== suggestion || currentDOMItems[i].dataset.isHistory !== String(isHistory)) {
                         currentDOMItems[i].textContent = suggestion;
-                        // Reset animation so it only plays when text actually changes
+                        currentDOMItems[i].dataset.isHistory = isHistory;
+                        currentDOMItems[i].classList.toggle("search-history-item", isHistory);
                         currentDOMItems[i].style.animation = 'none';
-                        currentDOMItems[i].offsetHeight; // trigger reflow
+                        currentDOMItems[i].offsetHeight;
                         currentDOMItems[i].style.animation = null;
                     }
                 } else {
                     // Append new item
-                    const item = elem("div").classes("search-autocomplete-item").text(suggestion);
+                    const item = elem("div")
+                        .classes("search-autocomplete-item")
+                        .classesIf(isHistory, "search-history-item")
+                        .text(suggestion);
+                    item.dataset.isHistory = isHistory;
                     item.styles({ animationDelay: `${i * 30}ms` });
+                    
+                    // FIXED: Use element text directly to avoid stale closure bug
                     item.addEventListener("click", (e) => {
-                        performSearch(suggestion, defaultSearchUrl, e.ctrlKey);
+                        performSearch(item.textContent, defaultSearchUrl, e.ctrlKey);
                     });
                     resultsElement.append(item);
                 }
@@ -284,13 +330,26 @@ function setupSearchBoxes() {
                 return;
             }
             try {
+                if (!googleAutocomplete) {
+                    showAutocomplete([query, []]);
+                    return;
+                }
                 const response = await fetch(`${pageData.baseURL}/api/autocomplete?q=${encodeURIComponent(query)}`);
                 const data = await response.json();
                 showAutocomplete(data);
             } catch (e) {
+                if (searchHistoryEnabled) showAutocomplete([query, []]);
                 console.error("Autocomplete error:", e);
             }
         }, 5, 200);
+
+        if (searchHistoryEnabled) {
+            subscribe((key) => {
+                if (key === 'search-history' && document.activeElement === inputElement) {
+                    fetchSuggestions(inputElement.value.trim());
+                }
+            });
+        }
 
         const changeCurrentBang = (bang) => {
             currentBang = bang;
@@ -919,10 +978,9 @@ function initThemePicker() {
 async function setupServiceWorker() {
     if ('serviceWorker' in navigator) {
         try {
-            const registration = await navigator.serviceWorker.register(`${pageData.baseURL}/sw.js`, {
+            await navigator.serviceWorker.register(`${pageData.baseURL}/sw.js`, {
                 scope: `${pageData.baseURL}/`
             });
-            console.log('[PWA] Service Worker registered with scope:', registration.scope);
         } catch (error) {
             console.error('[PWA] Service Worker registration failed:', error);
         }
