@@ -21,6 +21,9 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Keyboard Navigation:** Support for Arrow keys (or Ctrl+j/k) to navigate suggestions and Enter to search.
 - **Improved Autofocus:** Rewrote the autofocus logic to be robust against dynamic page loads and transitions, ensuring the search bar is focused reliably.
 
+### Performance
+- **Server-Side Rendering (SSR):** Implemented initial page rendering on the server. This eliminates the "empty shell" loading state and secondary network fetch, making page loads feel instantaneous (ideal for New Tab use).
+
 ## Configuration Examples
 
 ### To-do Widget

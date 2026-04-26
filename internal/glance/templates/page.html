@@ -104,13 +104,15 @@
     </div>
 
     <div class="content-bounds grow{{ if .Page.Width }} content-bounds-{{ .Page.Width }}{{ end }}">
-        <main class="page{{ if .Page.CenterVertically }} center-vertically{{ end }}" id="page" aria-live="polite" aria-busy="true">
+        <main class="page{{ if .Page.CenterVertically }} center-vertically{{ end }}{{ if .InitialContent }} content-ready{{ end }}" id="page" aria-live="polite" aria-busy="{{ if .InitialContent }}false{{ else }}true{{ end }}">
             <h1 class="visually-hidden">{{ .Page.Title }}</h1>
-            <div class="page-content" id="page-content"></div>
+            <div class="page-content" id="page-content">{{ .InitialContent }}</div>
+            {{ if not .InitialContent }}
             <div class="page-loading-container">
                 <div class="visually-hidden">Loading</div>
                 <div class="loading-icon" aria-hidden="true"></div>
             </div>
+            {{ end }}
         </main>
     </div>
 

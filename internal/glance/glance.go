@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -286,9 +287,10 @@ type templateRequestData struct {
 }
 
 type templateData struct {
-	App     *application
-	Page    *page
-	Request templateRequestData
+	App            *application
+	Page           *page
+	Request        templateRequestData
+	InitialContent template.HTML
 }
 
 func (a *application) populateTemplateRequestData(data *templateRequestData, r *http.Request) {
@@ -323,6 +325,19 @@ func (a *application) handlePageRequest(w http.ResponseWriter, r *http.Request) 
 		App:  a,
 	}
 	a.populateTemplateRequestData(&data.Request, r)
+
+	func() {
+		page.mu.Lock()
+		defer page.mu.Unlock()
+
+		page.updateOutdatedWidgets()
+
+		var contentBytes bytes.Buffer
+		err := pageContentTemplate.Execute(&contentBytes, data)
+		if err == nil {
+			data.InitialContent = template.HTML(contentBytes.String())
+		}
+	}()
 
 	var responseBytes bytes.Buffer
 	err := pageTemplate.Execute(&responseBytes, data)

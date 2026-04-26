@@ -912,9 +912,11 @@ async function setupPage() {
 
     const pageElement = document.getElementById("page");
     const pageContentElement = document.getElementById("page-content");
-    const pageContent = await fetchPageContent(pageData);
 
-    pageContentElement.innerHTML = pageContent;
+    if (pageContentElement.innerHTML.trim() === "") {
+        const pageContent = await fetchPageContent(pageData);
+        pageContentElement.innerHTML = pageContent;
+    }
 
     try {
         setupPopovers();
