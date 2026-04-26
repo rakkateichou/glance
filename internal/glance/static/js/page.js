@@ -293,7 +293,10 @@ function setupSearchBoxes() {
                     if (currentDOMItems[i].dataset.suggestion !== suggestion || currentDOMItems[i].dataset.isHistory !== String(isHistory)) {
                         currentDOMItems[i].innerHTML = "";
                         currentDOMItems[i].dataset.suggestion = suggestion;
-                        currentDOMItems[i].text(suggestion);
+                        
+                        const text = elem("span").classes("search-autocomplete-text").text(suggestion);
+                        currentDOMItems[i].append(text);
+                        
                         currentDOMItems[i].dataset.isHistory = isHistory;
                         currentDOMItems[i].classList.toggle("search-history-item", isHistory);
                         
@@ -314,8 +317,10 @@ function setupSearchBoxes() {
                     // Append new item
                     const item = elem("div")
                         .classes("search-autocomplete-item")
-                        .classesIf(isHistory, "search-history-item")
-                        .text(suggestion);
+                        .classesIf(isHistory, "search-history-item");
+                    
+                    const text = elem("span").classes("search-autocomplete-text").text(suggestion);
+                    item.append(text);
                     
                     item.dataset.suggestion = suggestion;
                     if (isHistory) {
