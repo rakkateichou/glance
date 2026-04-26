@@ -18,7 +18,7 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Direct URL Opening:** Added an `open-direct-url` flag that allows you to type a URL (like `google.com` or `https://ai.dev`) directly into the search box and open it instead of performing a web search.
 - **Google Autocomplete:** Added support for real-time Google search suggestions. Can be enabled via the `google-autocomplete: true` flag in the widget configuration.
 - **Customizable Limit:** Added `google-autocomplete-limit: <number>` to control how many suggestions are shown (removes scrolling).
-- **Search History:** Synced search history that appears at the top of suggestions with a distinct dashed underline. Can be enabled via the `search-history: true` flag.
+- **Search History:** Synced search history that appears at the top of suggestions with a distinct dashed underline. Includes the ability to remove individual entries via the "✕" button. Can be enabled via the `search-history: true` flag.
 - **Keyboard Navigation:** Support for Arrow keys (or Ctrl+j/k) to navigate suggestions and Enter to search.
 - **Improved Autofocus:** Rewrote the autofocus logic to be robust against dynamic page loads and transitions, ensuring the search bar is focused reliably.
 

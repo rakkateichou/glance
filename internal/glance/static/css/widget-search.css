@@ -142,6 +142,23 @@
 .search-history-item {
     text-decoration: underline dashed 1px var(--color-text-subdue);
     text-underline-offset: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.search-history-remove {
+    font-size: 0.8rem;
+    padding: 0.5rem;
+    opacity: 0.3;
+    transition: opacity 0.2s, transform 0.2s;
+    cursor: pointer;
+}
+
+.search-history-remove:hover {
+    opacity: 1;
+    color: var(--color-negative);
+    transform: scale(1.2);
 }
 
 /* Adjust the search box when results are shown */

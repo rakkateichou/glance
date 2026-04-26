@@ -147,6 +147,13 @@ function setupSearchBoxes() {
                 // Silently ignore storage errors
             }
         };
+        const removeFromHistory = (query) => {
+            let history = getHistory();
+            history = history.filter(h => h !== query);
+            localStorage.setItem('search-history', JSON.stringify(history));
+            broadcast('search-history', JSON.stringify(history));
+            fetchSuggestions(inputElement.value.trim()); // Refresh
+        };
         // -----------------------
 
         const performSearch = (query, template, ctrlKey) => {
@@ -283,10 +290,22 @@ function setupSearchBoxes() {
                 const isHistory = historySuggestions.includes(suggestion);
                 if (currentDOMItems[i]) {
                     // Update existing item
-                    if (currentDOMItems[i].textContent !== suggestion || currentDOMItems[i].dataset.isHistory !== String(isHistory)) {
-                        currentDOMItems[i].textContent = suggestion;
+                    if (currentDOMItems[i].dataset.suggestion !== suggestion || currentDOMItems[i].dataset.isHistory !== String(isHistory)) {
+                        currentDOMItems[i].innerHTML = "";
+                        currentDOMItems[i].dataset.suggestion = suggestion;
+                        currentDOMItems[i].text(suggestion);
                         currentDOMItems[i].dataset.isHistory = isHistory;
                         currentDOMItems[i].classList.toggle("search-history-item", isHistory);
+                        
+                        if (isHistory) {
+                            const removeBtn = elem("div").classes("search-history-remove").text("✕");
+                            removeBtn.addEventListener("click", (e) => {
+                                e.stopPropagation();
+                                removeFromHistory(suggestion);
+                            });
+                            currentDOMItems[i].append(removeBtn);
+                        }
+
                         currentDOMItems[i].style.animation = 'none';
                         currentDOMItems[i].offsetHeight;
                         currentDOMItems[i].style.animation = null;
@@ -297,12 +316,22 @@ function setupSearchBoxes() {
                         .classes("search-autocomplete-item")
                         .classesIf(isHistory, "search-history-item")
                         .text(suggestion);
+                    
+                    item.dataset.suggestion = suggestion;
+                    if (isHistory) {
+                        const removeBtn = elem("div").classes("search-history-remove").text("✕");
+                        removeBtn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            removeFromHistory(suggestion);
+                        });
+                        item.append(removeBtn);
+                    }
+
                     item.dataset.isHistory = isHistory;
                     item.styles({ animationDelay: `${i * 30}ms` });
                     
-                    // FIXED: Use element text directly to avoid stale closure bug
                     item.addEventListener("click", (e) => {
-                        performSearch(item.textContent, defaultSearchUrl, e.ctrlKey);
+                        performSearch(item.dataset.suggestion, defaultSearchUrl, e.ctrlKey);
                     });
                     resultsElement.append(item);
                 }
