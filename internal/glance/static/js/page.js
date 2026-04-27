@@ -214,7 +214,17 @@ function setupSearchBoxes() {
                     if (selectedIndex === -1) {
                         inputElement.value = originalValue;
                     } else {
-                        inputElement.value = suggestions[selectedIndex];
+                        const suggestion = suggestions[selectedIndex];
+                        inputElement.value = suggestion;
+
+                        // Browser-style highlighting:
+                        // If it's a prefix match, highlight the completion.
+                        // Otherwise, highlight the whole thing so the user can replace it.
+                        if (suggestion.toLowerCase().startsWith(originalValue.toLowerCase())) {
+                            inputElement.setSelectionRange(originalValue.length, suggestion.length);
+                        } else {
+                            inputElement.setSelectionRange(0, suggestion.length);
+                        }
                     }
 
                     updateSelection();
