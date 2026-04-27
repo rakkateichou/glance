@@ -398,20 +398,33 @@ function setupSearchBoxes() {
         }
 
         const handleInput = (event) => {
-            const value = inputElement.value.trim();
+            const value = inputElement.value;
+            const trimmedValue = value.trim();
             
             if (googleAutocomplete && !currentBang) {
-                fetchSuggestions(value);
+                fetchSuggestions(trimmedValue);
             } else {
                 hideAutocomplete();
             }
 
-            if (value in bangsMap) {
-                changeCurrentBang(bangsMap[value]);
+            // Inline Typeahead: Match history and highlight the suggestion
+            if (searchHistoryEnabled && event.inputType !== "deleteContentBackward" && value.length > 0) {
+                const history = getHistory();
+                const match = history.find(h => h.toLowerCase().startsWith(value.toLowerCase()));
+                
+                if (match && match.length > value.length) {
+                    const originalLength = value.length;
+                    inputElement.value = match;
+                    inputElement.setSelectionRange(originalLength, match.length);
+                }
+            }
+
+            if (trimmedValue in bangsMap) {
+                changeCurrentBang(bangsMap[trimmedValue]);
                 return;
             }
 
-            const words = value.split(" ");
+            const words = trimmedValue.split(" ");
             if (words.length >= 2 && words[0] in bangsMap) {
                 changeCurrentBang(bangsMap[words[0]]);
                 return;
