@@ -199,8 +199,9 @@ function setupSearchBoxes() {
                 if (isDown || isUp) {
                     event.preventDefault();
 
+                    // If we haven't started navigating yet, the current value (what the user typed) is our base
                     if (selectedIndex === -1) {
-                        originalValue = inputElement.value;
+                        // Note: originalValue is already set in handleInput
                     }
 
                     if (isDown) {
@@ -409,8 +410,9 @@ function setupSearchBoxes() {
         }
 
         const handleInput = (event) => {
-            const userTypedValue = inputElement.value; // Get exactly what exists before we maybe modify it
+            const userTypedValue = inputElement.value; 
             const trimmedValue = userTypedValue.trim();
+            originalValue = userTypedValue; // Capture the real typing for the arrow-key logic
             
             // 1. Fetch Google suggestions for exactly what the user typed
             if (googleAutocomplete && !currentBang) {
