@@ -263,13 +263,13 @@ function setupSearchBoxes() {
             selectedIndex = -1;
         };
 
-        const showAutocomplete = (data) => {
+        const showAutocomplete = (data, userQuery = "") => {
             const googleSuggestions = data[1] || [];
             let historySuggestions = [];
 
             if (searchHistoryEnabled) {
                 const history = getHistory();
-                const query = inputElement.value.trim().toLowerCase();
+                const query = (userQuery || inputElement.value.trim()).toLowerCase();
                 if (query) {
                     historySuggestions = history.filter(h => 
                         h.toLowerCase().includes(query) && !googleSuggestions.includes(h)
@@ -366,7 +366,7 @@ function setupSearchBoxes() {
 
             // INSTANT: Show history matches immediately while waiting for network
             if (searchHistoryEnabled) {
-                showAutocomplete([query, []]); 
+                showAutocomplete([query, []], query); 
             }
 
             try {
@@ -376,8 +376,9 @@ function setupSearchBoxes() {
                 const data = await response.json();
                 
                 // Ensure we are still showing results for the current input
-                if (inputElement.value.trim() === data[0]) {
-                    showAutocomplete(data);
+                // Note: We check against the query we SENT, not the current auto-filled box
+                if (inputElement.value.toLowerCase().startsWith(data[0].toLowerCase())) {
+                    showAutocomplete(data, data[0]);
                 }
             } catch (e) {
                 console.error("Autocomplete error:", e);
@@ -398,22 +399,23 @@ function setupSearchBoxes() {
         }
 
         const handleInput = (event) => {
-            const value = inputElement.value;
-            const trimmedValue = value.trim();
+            const userTypedValue = inputElement.value; // Get exactly what exists before we maybe modify it
+            const trimmedValue = userTypedValue.trim();
             
+            // 1. Fetch Google suggestions for exactly what the user typed
             if (googleAutocomplete && !currentBang) {
                 fetchSuggestions(trimmedValue);
             } else {
                 hideAutocomplete();
             }
 
-            // Inline Typeahead: Match history and highlight the suggestion
-            if (searchHistoryEnabled && event.inputType !== "deleteContentBackward" && value.length > 0) {
+            // 2. Inline Typeahead: Fill the box from history but DON'T affect the Google fetch
+            if (searchHistoryEnabled && event.inputType !== "deleteContentBackward" && userTypedValue.length > 0) {
                 const history = getHistory();
-                const match = history.find(h => h.toLowerCase().startsWith(value.toLowerCase()));
+                const match = history.find(h => h.toLowerCase().startsWith(userTypedValue.toLowerCase()));
                 
-                if (match && match.length > value.length) {
-                    const originalLength = value.length;
+                if (match && match.length > userTypedValue.length) {
+                    const originalLength = userTypedValue.length;
                     inputElement.value = match;
                     inputElement.setSelectionRange(originalLength, match.length);
                 }
