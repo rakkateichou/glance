@@ -27,6 +27,7 @@ type searchWidget struct {
 	GoogleAutocomplete bool     `yaml:"google-autocomplete"`
 	AutocompleteLimit int       `yaml:"google-autocomplete-limit"`
 	SearchHistory     bool      `yaml:"search-history"`
+	HistoryRetention  int       `yaml:"history-retention"`
 }
 
 func convertSearchUrl(url string) string {

@@ -112,6 +112,7 @@ function setupSearchBoxes() {
         const googleAutocomplete = widget.dataset.googleAutocomplete === "true";
         const googleAutocompleteLimit = parseInt(widget.dataset.googleAutocompleteLimit) || 0;
         const searchHistoryEnabled = widget.dataset.searchHistory === "true";
+        const historyRetentionDays = parseInt(widget.dataset.historyRetention) || 0;
         const inputElement = widget.getElementsByClassName("search-input")[0];
         const bangElement = widget.getElementsByClassName("search-bang")[0];
         const resultsElement = widget.getElementsByClassName("search-autocomplete-results")[0];
@@ -132,7 +133,35 @@ function setupSearchBoxes() {
         // --- History Helpers ---
         const getHistory = () => {
             try {
-                return JSON.parse(localStorage.getItem('search-history') || "[]");
+                const raw = localStorage.getItem('search-history') || "[]";
+                let history = JSON.parse(raw);
+
+                // Migration & Pruning
+                const now = Date.now();
+                const msPerDay = 24 * 60 * 60 * 1000;
+                let changed = false;
+
+                history = history.map(item => {
+                    // Convert old string-only format to new object format
+                    if (typeof item === 'string') {
+                        changed = true;
+                        return { q: item, t: now };
+                    }
+                    return item;
+                });
+
+                if (historyRetentionDays > 0) {
+                    const cutoff = now - (historyRetentionDays * msPerDay);
+                    const lengthBefore = history.length;
+                    history = history.filter(item => item.t > cutoff);
+                    if (history.length !== lengthBefore) changed = true;
+                }
+
+                if (changed) {
+                    localStorage.setItem('search-history', JSON.stringify(history));
+                }
+
+                return history;
             } catch (e) {
                 return [];
             }
@@ -140,7 +169,9 @@ function setupSearchBoxes() {
         const saveToHistory = (query) => {
             try {
                 let history = getHistory();
-                history = [query, ...history.filter(h => h !== query)].slice(0, 50);
+                const now = Date.now();
+                // Move to top and update timestamp
+                history = [{ q: query, t: now }, ...history.filter(h => h.q !== query)].slice(0, 50);
                 localStorage.setItem('search-history', JSON.stringify(history));
                 broadcast('search-history', JSON.stringify(history));
             } catch (e) {
@@ -149,7 +180,7 @@ function setupSearchBoxes() {
         };
         const removeFromHistory = (query) => {
             let history = getHistory();
-            history = history.filter(h => h !== query);
+            history = history.filter(h => h.q !== query);
             localStorage.setItem('search-history', JSON.stringify(history));
             broadcast('search-history', JSON.stringify(history));
             fetchSuggestions(inputElement.value.trim()); // Refresh
@@ -282,9 +313,10 @@ function setupSearchBoxes() {
                 const history = getHistory();
                 const query = (userQuery || inputElement.value.trim()).toLowerCase();
                 if (query) {
-                    historySuggestions = history.filter(h => 
-                        h.toLowerCase().includes(query) && !googleSuggestions.includes(h)
-                    ).slice(0, 3);
+                    historySuggestions = history
+                        .filter(item => item.q.toLowerCase().includes(query) && !googleSuggestions.includes(item.q))
+                        .slice(0, 3)
+                        .map(item => item.q);
                 }
             }
 
@@ -424,9 +456,10 @@ function setupSearchBoxes() {
             // 2. Inline Typeahead: Fill the box from history but DON'T affect the Google fetch
             if (searchHistoryEnabled && event.inputType !== "deleteContentBackward" && userTypedValue.length > 0) {
                 const history = getHistory();
-                const match = history.find(h => h.toLowerCase().startsWith(userTypedValue.toLowerCase()));
+                const matchItem = history.find(item => item.q.toLowerCase().startsWith(userTypedValue.toLowerCase()));
                 
-                if (match && match.length > userTypedValue.length) {
+                if (matchItem && matchItem.q.length > userTypedValue.length) {
+                    const match = matchItem.q;
                     const originalLength = userTypedValue.length;
                     inputElement.value = match;
                     inputElement.setSelectionRange(originalLength, match.length);
