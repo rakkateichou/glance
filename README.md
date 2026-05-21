@@ -23,6 +23,9 @@ This is a fork of [glanceapp/glance](https://github.com/glanceapp/glance) with t
 - **Keyboard Navigation:** Support for Arrow keys (or Ctrl+j/k) to navigate suggestions and Enter to search.
 - **Improved Autofocus:** Rewrote the autofocus logic to be robust against dynamic page loads and transitions, ensuring the search bar is focused reliably.
 
+### Server Stats Widget
+- **Remote Mountpoint Filtering:** Added client-side filtering support for remote server stats. Configured keys like `hide-mountpoints-by-default` and specific `mountpoints` details now work identically on `type: remote` servers as they do on `type: local` servers.
+
 ### Performance
 - **Server-Side Rendering (SSR):** Implemented initial page rendering on the server. This eliminates the "empty shell" loading state and secondary network fetch, making page loads feel instantaneous (ideal for New Tab use).
 - **PWA / Offline Support:** Added a Service Worker (`sw.js`) that caches all UI assets (CSS, JS, manifest). This allows Glance to load from the local disk instead of the network, achieving "extension-level" startup speeds.

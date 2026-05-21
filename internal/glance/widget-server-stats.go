@@ -70,6 +70,9 @@ func (widget *serverStatsWidget) update(context.Context) {
 					}
 				} else {
 					serv.IsReachable = true
+					if serv.SystemInfoRequest != nil {
+						serv.SystemInfoRequest.Filter(info)
+					}
 					serv.Info = info
 				}
 			}()

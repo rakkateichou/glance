@@ -296,3 +296,45 @@ func inferCPUTempSensor(sensors []sensors.TemperatureStat) *sensors.TemperatureS
 
 	return nil
 }
+
+func (req *SystemInfoRequest) Filter(info *SystemInfo) {
+	if info == nil {
+		return
+	}
+	if len(info.Mountpoints) == 0 {
+		return
+	}
+
+	filteredMountpoints := []MountpointInfo{}
+	addedMountpoints := map[string]struct{}{}
+
+	for _, mp := range info.Mountpoints {
+		if _, exists := addedMountpoints[mp.Path]; exists {
+			continue
+		}
+
+		mpReq, exists := req.Mountpoints[mp.Path]
+		isHidden := req.HideMountpointsByDefault
+		if exists && mpReq.Hide != nil {
+			isHidden = *mpReq.Hide
+		}
+
+		if isHidden {
+			continue
+		}
+
+		if exists && mpReq.Name != "" {
+			mp.Name = mpReq.Name
+		}
+
+		filteredMountpoints = append(filteredMountpoints, mp)
+		addedMountpoints[mp.Path] = struct{}{}
+	}
+
+	sort.Slice(filteredMountpoints, func(a, b int) bool {
+		return filteredMountpoints[a].UsedPercent > filteredMountpoints[b].UsedPercent
+	})
+
+	info.Mountpoints = filteredMountpoints
+}
+
