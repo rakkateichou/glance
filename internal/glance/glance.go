@@ -232,6 +232,7 @@ func newApplication(c *config) (*application, error) {
 	app.parsedManifest = []byte(manifest)
 
 	globalSyncStore.load()
+	globalBrowserHistory.load()
 
 	return app, nil
 }
@@ -521,6 +522,11 @@ func (a *application) server() (func() error, func() error) {
 	mux.HandleFunc("/api/sync", a.handleSyncWebSocket)
 	mux.HandleFunc("GET /api/autocomplete", a.handleAutocompleteProxy)
 	mux.HandleFunc("GET /sw.js", a.handleServiceWorker)
+
+	mux.HandleFunc("POST /api/browser-history/visits", a.handleBrowserHistoryUpload)
+	mux.HandleFunc("POST /api/browser-history/delete", a.handleBrowserHistoryDelete)
+	mux.HandleFunc("GET /api/browser-history/search", a.handleBrowserHistorySearch)
+	mux.HandleFunc("GET /api/browser-history/typed-sites", a.handleBrowserHistoryTypedSites)
 
 	if a.RequiresAuth {
 		mux.HandleFunc("GET /login", a.handleLoginPageRequest)

@@ -96,9 +96,9 @@ function updateRelativeTimeForElements(elements)
     }
 }
 
-// Browser history lookups through the Glance New Tab extension (extension/ in the repo),
-// whose content script marks the page and relays these requests to it
-function connectBrowserHistory() {
+// The Glance New Tab extension (extension/ in the repo), if it's installed in this browser.
+// Its content script marks the page and relays these requests to it.
+function connectExtension() {
     const extensionURL = document.documentElement.dataset.glanceExtension;
     if (!extensionURL) return null;
 
@@ -124,6 +124,29 @@ function connectBrowserHistory() {
     };
 }
 
+// Browser history synced to the server by the extension from every device it's installed on,
+// so it's available on devices without it too
+function browserHistoryAPI(extension) {
+    const apiURL = `${pageData.baseURL}/api/browser-history`;
+    const json = (response) => response.ok ? response.json() : Promise.reject(new Error(`${response.status} ${response.statusText}`));
+
+    return {
+        search: (text) => fetch(`${apiURL}/search?q=${encodeURIComponent(text)}`).then(json),
+        typedSites: () => fetch(`${apiURL}/typed-sites`).then(json),
+        delete: (url) => Promise.all([
+            fetch(`${apiURL}/delete`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ urls: [url] }),
+            }).then(json),
+            // From this browser's own history too, like Chrome does
+            extension?.request({ type: "delete-visit", url }),
+        ]),
+        // Without the extension, try the site's own favicon
+        faviconURL: (pageURL) => extension ? extension.faviconURL(pageURL) : new URL("/favicon.ico", pageURL).href,
+    };
+}
+
 function setupSearchBoxes() {
     const searchWidgets = document.getElementsByClassName("search");
 
@@ -131,7 +154,7 @@ function setupSearchBoxes() {
         return;
     }
 
-    const browserHistory = connectBrowserHistory();
+    const extension = connectExtension();
 
     for (let i = 0; i < searchWidgets.length; i++) {
         const widget = searchWidgets[i];
@@ -143,6 +166,7 @@ function setupSearchBoxes() {
         const googleAutocompleteLimit = parseInt(widget.dataset.googleAutocompleteLimit) || 0;
         const searchHistoryEnabled = widget.dataset.searchHistory === "true";
         const historyRetentionDays = parseInt(widget.dataset.historyRetention) || 0;
+        const browserHistory = widget.dataset.browserHistory === "true" ? browserHistoryAPI(extension) : null;
         const inputElement = widget.getElementsByClassName("search-input")[0];
         const bangElement = widget.getElementsByClassName("search-bang")[0];
         const resultsElement = widget.getElementsByClassName("search-autocomplete-results")[0];
@@ -272,7 +296,7 @@ function setupSearchBoxes() {
             inputElement.value = originalValue;
 
             if (suggestion.kind === "visit") {
-                browserHistory.request({ type: "delete-visit", url: suggestion.url })
+                browserHistory.delete(suggestion.url)
                     .then(() => {
                         lastVisits = lastVisits.filter(visit => visit.url !== suggestion.url);
                         fetchSuggestions(inputElement.value.trim());
@@ -285,7 +309,7 @@ function setupSearchBoxes() {
 
         const loadTypedSites = () => {
             typedSites = [];
-            browserHistory.request({ type: "typed-sites" })
+            browserHistory.typedSites()
                 .then((sites) => typedSites = sites)
                 .catch((e) => console.error("Browser history error:", e));
         };
@@ -413,10 +437,9 @@ function setupSearchBoxes() {
                 if (suggestion.title) {
                     text.append(elem("span").classes("search-visit-url").text(suggestion.text));
                 }
-                item.append(
-                    elem("img").classes("search-visit-icon").attrs({ src: browserHistory.faviconURL(suggestion.url), alt: "" }),
-                    text,
-                );
+                const icon = elem("img").classes("search-visit-icon").attrs({ src: browserHistory.faviconURL(suggestion.url), alt: "" });
+                icon.addEventListener("error", () => icon.style.visibility = "hidden");
+                item.append(icon, text);
             } else {
                 item.append(elem("span").classes("search-autocomplete-text").text(suggestion.text));
             }
@@ -516,7 +539,7 @@ function setupSearchBoxes() {
             const updates = [];
 
             if (browserHistory) {
-                updates.push(browserHistory.request({ type: "search-visits", text: query })
+                updates.push(browserHistory.search(query)
                     .then((visits) => {
                         if (!isCurrent()) return;
                         lastVisits = visits;

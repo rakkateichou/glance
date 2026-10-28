@@ -28,6 +28,8 @@ type searchWidget struct {
 	AutocompleteLimit int       `yaml:"google-autocomplete-limit"`
 	SearchHistory     bool      `yaml:"search-history"`
 	HistoryRetention  int       `yaml:"history-retention"`
+	// Suggest pages from the browser history synced by the Glance New Tab extension
+	BrowserHistory    bool      `yaml:"browser-history"`
 }
 
 func convertSearchUrl(url string) string {
