@@ -153,6 +153,32 @@
     text-underline-offset: 4px;
 }
 
+/* Pages from the browser history, via the Glance New Tab extension */
+.search-visit-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-visit-icon {
+    width: 1.6rem;
+    height: 1.6rem;
+    flex-shrink: 0;
+}
+
+.search-visit-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.search-visit-url {
+    margin-left: 1rem;
+    color: var(--color-text-subdue);
+}
+
 .search-history-remove {
     font-size: 1.7rem;
     padding: 0 0.5rem;

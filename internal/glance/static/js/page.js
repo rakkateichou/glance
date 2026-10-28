@@ -96,12 +96,42 @@ function updateRelativeTimeForElements(elements)
     }
 }
 
+// Browser history lookups through the Glance New Tab extension (extension/ in the repo),
+// whose content script marks the page and relays these requests to it
+function connectBrowserHistory() {
+    const extensionURL = document.documentElement.dataset.glanceExtension;
+    if (!extensionURL) return null;
+
+    const pending = new Map();
+    let nextID = 0;
+
+    window.addEventListener("message", (event) => {
+        if (event.source !== window || event.data?.source !== "glance-extension") return;
+
+        const settle = pending.get(event.data.id);
+        if (!settle) return;
+        pending.delete(event.data.id);
+        settle(event.data.response);
+    });
+
+    return {
+        request: (request) => new Promise((resolve, reject) => {
+            const id = nextID++;
+            pending.set(id, (response) => response?.error ? reject(new Error(response.error)) : resolve(response));
+            window.postMessage({ source: "glance-page", id, request }, location.origin);
+        }),
+        faviconURL: (pageURL) => `${extensionURL}_favicon/?pageUrl=${encodeURIComponent(pageURL)}&size=32`,
+    };
+}
+
 function setupSearchBoxes() {
     const searchWidgets = document.getElementsByClassName("search");
 
     if (searchWidgets.length == 0) {
         return;
     }
+
+    const browserHistory = connectBrowserHistory();
 
     for (let i = 0; i < searchWidgets.length; i++) {
         const widget = searchWidgets[i];
@@ -123,8 +153,17 @@ function setupSearchBoxes() {
         let lastQuery = "";
         let originalValue = "";
         let selectedIndex = -1;
+        // { kind: "history" (past search) | "visit" (browser history page) | "google", text, url?, title? }
         let suggestions = [];
         let lastGoogleSuggestions = [];
+        let lastVisits = [];
+        let suggestionsRequest = 0;
+        // Sites typed into the address bar before, for inline completion, and the one the box is
+        // currently completed to
+        let typedSites = null;
+        let inlineSite = null;
+        const suggestionsEnabled = googleAutocomplete || browserHistory != null;
+        const itemSuggestions = new WeakMap();
 
         for (let j = 0; j < bangs.length; j++) {
             const bang = bangs[j];
@@ -206,15 +245,49 @@ function setupSearchBoxes() {
                 url = template.replace("!QUERY!", encodeURIComponent(q));
             }
 
+            lastQuery = q;
+            navigate(url, ctrlKey);
+        };
+
+        const navigate = (url, ctrlKey) => {
             if (newTab && !ctrlKey || !newTab && ctrlKey) {
                 window.open(url, target).focus();
-                lastQuery = q;
                 inputElement.value = "";
                 originalValue = "";
                 hideAutocomplete();
             } else {
                 window.location.href = url;
             }
+        };
+
+        const activateSuggestion = (suggestion, ctrlKey) => {
+            if (suggestion.kind === "visit") {
+                navigate(suggestion.url, ctrlKey);
+            } else {
+                performSearch(suggestion.text, defaultSearchUrl, ctrlKey);
+            }
+        };
+
+        const removeSuggestion = (suggestion) => {
+            inputElement.value = originalValue;
+
+            if (suggestion.kind === "visit") {
+                browserHistory.request({ type: "delete-visit", url: suggestion.url })
+                    .then(() => {
+                        lastVisits = lastVisits.filter(visit => visit.url !== suggestion.url);
+                        fetchSuggestions(inputElement.value.trim());
+                    })
+                    .catch((e) => console.error("Browser history error:", e));
+            } else {
+                removeFromHistory(suggestion.text);
+            }
+        };
+
+        const loadTypedSites = () => {
+            typedSites = [];
+            browserHistory.request({ type: "typed-sites" })
+                .then((sites) => typedSites = sites)
+                .catch((e) => console.error("Browser history error:", e));
         };
 
         const handleKeyDown = (event) => {
@@ -231,7 +304,7 @@ function setupSearchBoxes() {
                 return;
             }
 
-            if (googleAutocomplete && suggestions.length > 0) {
+            if (suggestionsEnabled && suggestions.length > 0) {
                 const isDown = event.key === "ArrowDown" || (event.key === "j" && event.ctrlKey);
                 const isUp = event.key === "ArrowUp" || (event.key === "k" && event.ctrlKey);
 
@@ -251,7 +324,7 @@ function setupSearchBoxes() {
                         if (selectedIndex < -1) selectedIndex = suggestions.length - 1;
                     }
 
-                    inputElement.value = selectedIndex === -1 ? originalValue : suggestions[selectedIndex];
+                    inputElement.value = selectedIndex === -1 ? originalValue : suggestions[selectedIndex].text;
 
                     // Like Chrome, put the caret at the end so typing, space and backspace
                     // continue from the selected suggestion
@@ -262,28 +335,30 @@ function setupSearchBoxes() {
                     return;
                 }
 
-                // Like Chrome, Shift+Delete removes the selected history suggestion
-                if (event.key === "Delete" && event.shiftKey && selectedIndex >= 0 && searchHistoryEnabled) {
-                    const suggestion = suggestions[selectedIndex];
-                    if (getHistory().some(item => item.q === suggestion)) {
-                        event.preventDefault();
-                        inputElement.value = originalValue;
-                        removeFromHistory(suggestion);
-                        return;
-                    }
+                // Like Chrome, Shift+Delete removes the selected past search or visited page
+                if (event.key === "Delete" && event.shiftKey && selectedIndex >= 0 && suggestions[selectedIndex].kind !== "google") {
+                    event.preventDefault();
+                    removeSuggestion(suggestions[selectedIndex]);
+                    return;
                 }
             }
 
             // Like Chrome, arrow down reopens suggestions after they were closed with Escape
-            if (googleAutocomplete && suggestions.length === 0 && event.key === "ArrowDown" && inputElement.value.trim() && !currentBang) {
+            if (suggestionsEnabled && suggestions.length === 0 && event.key === "ArrowDown" && inputElement.value.trim() && !currentBang) {
                 event.preventDefault();
                 fetchSuggestions(inputElement.value.trim());
                 return;
             }
 
             if (event.key == "Enter") {
-                if (googleAutocomplete && selectedIndex >= 0) {
-                    performSearch(suggestions[selectedIndex], defaultSearchUrl, event.ctrlKey);
+                if (selectedIndex >= 0) {
+                    activateSuggestion(suggestions[selectedIndex], event.ctrlKey);
+                    return;
+                }
+
+                // The box holds a site it was inline completed to, open it like Chrome would
+                if (inlineSite && inputElement.value === inlineSite.text && currentBang == null) {
+                    navigate(inlineSite.url, event.ctrlKey);
                     return;
                 }
 
@@ -303,7 +378,7 @@ function setupSearchBoxes() {
                 return;
             }
 
-            if (event.key == "ArrowUp" && lastQuery.length > 0 && (!googleAutocomplete || suggestions.length === 0)) {
+            if (event.key == "ArrowUp" && lastQuery.length > 0 && (!suggestionsEnabled || suggestions.length === 0)) {
                 inputElement.value = lastQuery;
                 return;
             }
@@ -322,93 +397,95 @@ function setupSearchBoxes() {
             selectedIndex = -1;
         };
 
-        const showAutocomplete = (data, userQuery = "") => {
-            const googleSuggestions = data[1] || [];
-            lastGoogleSuggestions = googleSuggestions;
-            let historySuggestions = [];
+        const suggestionKey = (suggestion) => JSON.stringify([suggestion.kind, suggestion.text, suggestion.url ?? "", suggestion.title ?? ""]);
 
-            if (searchHistoryEnabled) {
-                const history = getHistory();
-                const query = (userQuery || inputElement.value.trim()).toLowerCase();
-                if (query) {
-                    historySuggestions = history
-                        .filter(item => item.q.toLowerCase().includes(query) && !googleSuggestions.includes(item.q))
-                        .slice(0, 3)
-                        .map(item => item.q);
+        const fillItem = (item, suggestion) => {
+            item.innerHTML = "";
+            item.dataset.key = suggestionKey(suggestion);
+            item.classList.toggle("search-history-item", suggestion.kind === "history");
+            item.classList.toggle("search-visit-item", suggestion.kind === "visit");
+            itemSuggestions.set(item, suggestion);
+
+            if (suggestion.kind === "visit") {
+                // Like Chrome: favicon, page title, then the URL
+                const text = elem("span").classes("search-autocomplete-text", "search-visit-text")
+                    .append(elem("span").classes("search-visit-title").text(suggestion.title || suggestion.text));
+                if (suggestion.title) {
+                    text.append(elem("span").classes("search-visit-url").text(suggestion.text));
                 }
+                item.append(
+                    elem("img").classes("search-visit-icon").attrs({ src: browserHistory.faviconURL(suggestion.url), alt: "" }),
+                    text,
+                );
+            } else {
+                item.append(elem("span").classes("search-autocomplete-text").text(suggestion.text));
             }
 
-            const combinedSuggestions = [...historySuggestions, ...googleSuggestions];
-            const limitedSuggestions = googleAutocompleteLimit > 0 ? combinedSuggestions.slice(0, googleAutocompleteLimit) : combinedSuggestions;
+            if (suggestion.kind !== "google") {
+                const removeBtn = elem("div").classes("search-history-remove").text("✕");
+                removeBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    removeSuggestion(suggestion);
+                });
+                item.append(removeBtn);
+            }
+        };
 
-            if (JSON.stringify(suggestions) === JSON.stringify(limitedSuggestions)) {
+        const renderSuggestions = (query) => {
+            const lowerQuery = query.toLowerCase();
+            let historySuggestions = [];
+
+            if (searchHistoryEnabled && lowerQuery) {
+                historySuggestions = getHistory()
+                    .filter(item => item.q.toLowerCase().includes(lowerQuery) && !lastGoogleSuggestions.includes(item.q))
+                    .slice(0, 3)
+                    .map(item => ({ kind: "history", text: item.q }));
+            }
+
+            const queries = [...historySuggestions, ...lastGoogleSuggestions.map(text => ({ kind: "google", text }))];
+            const limitedQueries = googleAutocompleteLimit > 0 ? queries.slice(0, googleAutocompleteLimit) : queries;
+            const historyCount = Math.min(historySuggestions.length, limitedQueries.length);
+
+            // Pages from the browser history go after past searches, and don't count toward the
+            // limit, which is for search suggestions
+            const visits = lastVisits.map(visit => ({ kind: "visit", text: visit.text, url: visit.url, title: visit.title }));
+            const newSuggestions = [...limitedQueries.slice(0, historyCount), ...visits, ...limitedQueries.slice(historyCount)];
+
+            if (JSON.stringify(suggestions) === JSON.stringify(newSuggestions)) {
                 return;
             }
 
             const currentDOMItems = Array.from(resultsElement.getElementsByClassName("search-autocomplete-item"));
-            
-            limitedSuggestions.forEach((suggestion, i) => {
-                const isHistory = historySuggestions.includes(suggestion);
-                if (currentDOMItems[i]) {
-                    // Update existing item
-                    if (currentDOMItems[i].dataset.suggestion !== suggestion || currentDOMItems[i].dataset.isHistory !== String(isHistory)) {
-                        currentDOMItems[i].innerHTML = "";
-                        currentDOMItems[i].dataset.suggestion = suggestion;
-                        
-                        const text = elem("span").classes("search-autocomplete-text").text(suggestion);
-                        currentDOMItems[i].append(text);
-                        
-                        currentDOMItems[i].dataset.isHistory = isHistory;
-                        currentDOMItems[i].classList.toggle("search-history-item", isHistory);
-                        
-                        if (isHistory) {
-                            const removeBtn = elem("div").classes("search-history-remove").text("✕");
-                            removeBtn.addEventListener("click", (e) => {
-                                e.stopPropagation();
-                                removeFromHistory(suggestion);
-                            });
-                            currentDOMItems[i].append(removeBtn);
-                        }
 
-                        currentDOMItems[i].style.animation = 'none';
-                        currentDOMItems[i].offsetHeight;
-                        currentDOMItems[i].style.animation = null;
+            newSuggestions.forEach((suggestion, i) => {
+                const existing = currentDOMItems[i];
+
+                if (existing) {
+                    // Update existing item
+                    if (existing.dataset.key !== suggestionKey(suggestion)) {
+                        fillItem(existing, suggestion);
+                        existing.style.animation = 'none';
+                        existing.offsetHeight;
+                        existing.style.animation = null;
                     }
                 } else {
                     // Append new item
-                    const item = elem("div")
-                        .classes("search-autocomplete-item")
-                        .classesIf(isHistory, "search-history-item");
-                    
-                    const text = elem("span").classes("search-autocomplete-text").text(suggestion);
-                    item.append(text);
-                    
-                    item.dataset.suggestion = suggestion;
-                    if (isHistory) {
-                        const removeBtn = elem("div").classes("search-history-remove").text("✕");
-                        removeBtn.addEventListener("click", (e) => {
-                            e.stopPropagation();
-                            removeFromHistory(suggestion);
-                        });
-                        item.append(removeBtn);
-                    }
-
-                    item.dataset.isHistory = isHistory;
+                    const item = elem("div").classes("search-autocomplete-item");
+                    fillItem(item, suggestion);
                     item.styles({ animationDelay: `${i * 30}ms` });
-                    
                     item.addEventListener("click", (e) => {
-                        performSearch(item.dataset.suggestion, defaultSearchUrl, e.ctrlKey);
+                        activateSuggestion(itemSuggestions.get(item), e.ctrlKey);
                     });
                     resultsElement.append(item);
                 }
             });
 
             // Clean up extra items
-            if (currentDOMItems.length > limitedSuggestions.length) {
-                currentDOMItems.slice(limitedSuggestions.length).forEach(item => item.remove());
+            if (currentDOMItems.length > newSuggestions.length) {
+                currentDOMItems.slice(newSuggestions.length).forEach(item => item.remove());
             }
 
-            suggestions = limitedSuggestions;
+            suggestions = newSuggestions;
             if (suggestions.length === 0) {
                 hideAutocomplete();
                 return;
@@ -425,28 +502,41 @@ function setupSearchBoxes() {
                 return;
             }
 
-            // INSTANT: Show history matches immediately while waiting for network, keeping
-            // the previous Google suggestions that still match (like Chrome) instead of
-            // closing the list on every keystroke
-            if (searchHistoryEnabled) {
-                const stillMatching = lastGoogleSuggestions.filter(s => s.toLowerCase().startsWith(query.toLowerCase()));
-                showAutocomplete([query, stillMatching], query);
+            // INSTANT: Show matching past searches right away, keeping the previous suggestions
+            // that still match (like Chrome) instead of closing the list on every keystroke
+            const lowerQuery = query.toLowerCase();
+            lastGoogleSuggestions = lastGoogleSuggestions.filter(s => s.toLowerCase().startsWith(lowerQuery));
+            lastVisits = lastVisits.filter(visit => visit.text.toLowerCase().includes(lowerQuery) || visit.title.toLowerCase().includes(lowerQuery));
+            renderSuggestions(query);
+
+            // Only use responses for the latest input, and only if the box still starts with
+            // what was sent (not the inline completed text)
+            const request = ++suggestionsRequest;
+            const isCurrent = () => request === suggestionsRequest && inputElement.value.toLowerCase().startsWith(lowerQuery);
+            const updates = [];
+
+            if (browserHistory) {
+                updates.push(browserHistory.request({ type: "search-visits", text: query })
+                    .then((visits) => {
+                        if (!isCurrent()) return;
+                        lastVisits = visits;
+                        renderSuggestions(query);
+                    })
+                    .catch((e) => console.error("Browser history error:", e)));
             }
 
-            try {
-                if (!googleAutocomplete) return;
-
-                const response = await fetch(`${pageData.baseURL}/api/autocomplete?q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-                
-                // Ensure we are still showing results for the current input
-                // Note: We check against the query we SENT, not the current auto-filled box
-                if (inputElement.value.toLowerCase().startsWith(data[0].toLowerCase())) {
-                    showAutocomplete(data, data[0]);
-                }
-            } catch (e) {
-                console.error("Autocomplete error:", e);
+            if (googleAutocomplete) {
+                updates.push(fetch(`${pageData.baseURL}/api/autocomplete?q=${encodeURIComponent(query)}`)
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (!isCurrent()) return;
+                        lastGoogleSuggestions = data[1] || [];
+                        renderSuggestions(query);
+                    })
+                    .catch((e) => console.error("Autocomplete error:", e)));
             }
+
+            await Promise.all(updates);
         }, 5, 200);
 
         if (searchHistoryEnabled) {
@@ -472,23 +562,36 @@ function setupSearchBoxes() {
             selectedIndex = -1;
             updateSelection();
 
-            // 1. Fetch Google suggestions for exactly what the user typed
-            if (googleAutocomplete && !currentBang) {
+            // 1. Fetch suggestions for exactly what the user typed
+            if (suggestionsEnabled && !currentBang) {
                 fetchSuggestions(trimmedValue);
             } else {
                 hideAutocomplete();
             }
 
-            // 2. Inline Typeahead: Fill the box from history but DON'T affect the Google fetch
-            if (searchHistoryEnabled && event.inputType !== "deleteContentBackward" && userTypedValue.length > 0) {
-                const history = getHistory();
-                const matchItem = history.find(item => item.q.toLowerCase().startsWith(userTypedValue.toLowerCase()));
-                
-                if (matchItem && matchItem.q.length > userTypedValue.length) {
-                    const match = matchItem.q;
-                    const originalLength = userTypedValue.length;
-                    inputElement.value = match;
-                    inputElement.setSelectionRange(originalLength, match.length);
+            // 2. Inline Typeahead: Fill the box with a past search, or else (like Chrome) a site
+            // typed into the address bar before, but DON'T affect the suggestions fetch. Not when
+            // deleting (Backspace or Delete), so the completion can be removed.
+            inlineSite = null;
+            if (!event.inputType?.startsWith("delete") && userTypedValue.length > 0) {
+                const lowerTyped = userTypedValue.toLowerCase();
+                let completion = null;
+
+                if (searchHistoryEnabled) {
+                    completion = getHistory().find(item => item.q.toLowerCase().startsWith(lowerTyped))?.q ?? null;
+                }
+
+                if (completion == null && typedSites && !/\s/.test(userTypedValue)) {
+                    const site = typedSites.find(site => site.text.startsWith(lowerTyped) || site.host.startsWith(lowerTyped));
+                    if (site) {
+                        completion = site.text.startsWith(lowerTyped) ? site.text : site.host;
+                        inlineSite = { text: completion, url: site.url };
+                    }
+                }
+
+                if (completion != null && completion.length > userTypedValue.length) {
+                    inputElement.value = completion;
+                    inputElement.setSelectionRange(userTypedValue.length, completion.length);
                 }
             }
 
@@ -509,6 +612,10 @@ function setupSearchBoxes() {
         const attachListeners = () => {
             document.addEventListener("keydown", handleKeyDown);
             inputElement.addEventListener("input", handleInput);
+
+            if (browserHistory && typedSites == null) {
+                loadTypedSites();
+            }
         };
 
         const detachListeners = () => {

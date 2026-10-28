@@ -1,0 +1,26 @@
+{
+    "manifest_version": 3,
+    "name": "Glance New Tab",
+    "version": "1.0.0",
+    "description": "Opens Glance in new tabs and lets its search box suggest pages from your browsing history.",
+    "chrome_url_overrides": {
+        "newtab": "newtab.html"
+    },
+    "permissions": ["history", "favicon"],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": ["https://glance/*"],
+            "js": ["content.js"],
+            "run_at": "document_start"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": ["_favicon/*"],
+            "matches": ["https://glance/*"]
+        }
+    ]
+}
