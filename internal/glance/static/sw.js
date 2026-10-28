@@ -18,8 +18,13 @@ self.addEventListener('activate', (event) => {
             await self.registration.navigationPreload.enable();
         }
 
-        const keys = await caches.keys();
-        await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+        try {
+            const keys = await caches.keys();
+            await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+        } catch (error) {
+            console.error('[PWA] Failed to clean up old caches:', error);
+        }
+
         await self.clients.claim();
     })());
 });
@@ -41,21 +46,37 @@ self.addEventListener('fetch', (event) => {
     }
 });
 
+// Caching is best effort: if the browser's cache storage fails (disk full, corrupted
+// profile), requests still go to the network rather than failing
+async function fromCache(key) {
+    try {
+        return await (await caches.open(CACHE_NAME)).match(key);
+    } catch {
+        return undefined;
+    }
+}
+
+async function toCache(key, response) {
+    try {
+        await (await caches.open(CACHE_NAME)).put(key, response);
+    } catch {
+        // Ignored, see fromCache
+    }
+}
+
 // Pages: network first so widgets are fresh, falling back to the last cached copy
 // when the server is slow, down or unreachable
 async function handleNavigation(event) {
-    const cache = await caches.open(CACHE_NAME);
-
     const network = (async () => {
         const response = (await event.preloadResponse) || await fetch(event.request);
         if (response.ok && response.type === 'basic') {
-            await cache.put(event.request.url, response.clone());
+            await toCache(event.request.url, response.clone());
         }
         return response;
     })();
     event.waitUntil(network.catch(() => {}));
 
-    const cached = await cache.match(event.request.url);
+    const cached = await fromCache(event.request.url);
     if (!cached) {
         return network;
     }
@@ -70,15 +91,14 @@ async function handleNavigation(event) {
 
 // Static assets have the content hash in their URL, so a cached copy is always current
 async function handleStaticAsset(request) {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(request);
+    const cached = await fromCache(request);
     if (cached) {
         return cached;
     }
 
     const response = await fetch(request);
     if (response.ok) {
-        cache.put(request, response.clone());
+        toCache(request, response.clone());
     }
     return response;
 }
@@ -86,20 +106,13 @@ async function handleStaticAsset(request) {
 // User assets (custom CSS, scripts in the document head) can block rendering, so serve the
 // cached copy right away and refresh it in the background; edits show up on the next load
 async function handleUserAsset(event) {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(event.request);
-
-    const network = fetch(event.request, { cache: 'no-cache' }).then((response) => {
+    const network = fetch(event.request, { cache: 'no-cache' }).then(async (response) => {
         if (response.ok) {
-            return cache.put(event.request, response.clone()).then(() => response);
+            await toCache(event.request, response.clone());
         }
         return response;
     });
-
-    if (!cached) {
-        return network;
-    }
-
     event.waitUntil(network.catch(() => {}));
-    return cached;
+
+    return (await fromCache(event.request)) || network;
 }
