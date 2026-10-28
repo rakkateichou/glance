@@ -98,8 +98,11 @@
     border-color: var(--color-primary);
 }
 
+/* No fill-mode: keeping the final transform applied would leave the results on their own
+   compositing layer, which at fractional scaling (e.g. 125%) gets snapped a device pixel
+   away from the search box, misaligning the side borders */
 .search-autocomplete-results:not(.hidden) {
-    animation: searchAutocompleteEntrance 0.15s ease-out forwards;
+    animation: searchAutocompleteEntrance 0.15s ease-out;
 }
 
 @keyframes searchAutocompleteEntrance {
@@ -173,5 +176,9 @@
 .search:has(.search-autocomplete-results:not(.hidden)) {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
+    /* Hidden under the results anyway; making the border non-uniform like the results' one
+       (which has no top) gets both painted the same way, so their side edges line up at
+       fractional scaling instead of being antialiased differently */
+    border-bottom-color: transparent;
 }
 
