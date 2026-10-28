@@ -620,6 +620,11 @@ func (a *application) handleServiceWorker(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Versioning the worker's cache by the static assets hash makes browsers pick up a new
+	// worker (and drop the old cache) on every update
+	contents = bytes.ReplaceAll(contents, []byte("__STATIC_ASSETS_HASH__"), []byte(staticFSHash))
+
 	w.Header().Set("Content-Type", "application/javascript")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.Write(contents)
 }

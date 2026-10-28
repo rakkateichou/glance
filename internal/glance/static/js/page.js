@@ -1106,7 +1106,8 @@ async function setupServiceWorker() {
     if ('serviceWorker' in navigator) {
         try {
             await navigator.serviceWorker.register(`${pageData.baseURL}/sw.js`, {
-                scope: `${pageData.baseURL}/`
+                scope: `${pageData.baseURL}/`,
+                updateViaCache: 'none'
             });
         } catch (error) {
             console.error('[PWA] Service Worker registration failed:', error);
