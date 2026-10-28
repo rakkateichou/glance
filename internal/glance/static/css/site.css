@@ -11,9 +11,9 @@
     display: none;
 }
 
+/* Shown straight away without an entrance animation, so a new tab feels instant */
 .page.content-ready > .page-content {
     display: block;
-    animation: pageContentEntrance .3s cubic-bezier(0.25, 1, 0.5, 1) backwards;
 }
 
 .page-column-small .size-title-dynamic {
@@ -145,13 +145,6 @@ body {
 .page-columns {
     display: flex;
     gap: var(--widget-gap);
-}
-
-@keyframes pageContentEntrance {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
 }
 
 .page-loading-container {
