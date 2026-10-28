@@ -262,6 +262,14 @@ function setupSearchBoxes() {
                     updateSelection();
                     return;
                 }
+
+                // Typing while a suggestion is selected continues from the end of it (like Chrome),
+                // instead of replacing the highlighted part of the suggestion
+                const isPrintable = event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+                if (selectedIndex >= 0 && isPrintable && !event.isComposing) {
+                    const end = inputElement.value.length;
+                    inputElement.setSelectionRange(end, end);
+                }
             }
 
             if (event.key == "Enter") {
