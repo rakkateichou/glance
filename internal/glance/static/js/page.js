@@ -124,6 +124,7 @@ function setupSearchBoxes() {
         let originalValue = "";
         let selectedIndex = -1;
         let suggestions = [];
+        let lastGoogleSuggestions = [];
 
         for (let j = 0; j < bangs.length; j++) {
             const bang = bangs[j];
@@ -218,8 +219,15 @@ function setupSearchBoxes() {
 
         const handleKeyDown = (event) => {
             if (event.key == "Escape") {
+                // Like Chrome, the first Escape reverts to what was typed (dropping the selected
+                // suggestion or inline completion) and closes the suggestions, the next one blurs
+                if (!resultsElement.classList.contains("hidden")) {
+                    inputElement.value = originalValue;
+                    hideAutocomplete();
+                    return;
+                }
+
                 inputElement.blur();
-                hideAutocomplete();
                 return;
             }
 
@@ -243,33 +251,34 @@ function setupSearchBoxes() {
                         if (selectedIndex < -1) selectedIndex = suggestions.length - 1;
                     }
 
-                    if (selectedIndex === -1) {
-                        inputElement.value = originalValue;
-                    } else {
-                        const suggestion = suggestions[selectedIndex];
-                        inputElement.value = suggestion;
+                    inputElement.value = selectedIndex === -1 ? originalValue : suggestions[selectedIndex];
 
-                        // Browser-style highlighting:
-                        // If it's a prefix match, highlight the completion.
-                        // Otherwise, highlight the whole thing so the user can replace it.
-                        if (suggestion.toLowerCase().startsWith(originalValue.toLowerCase())) {
-                            inputElement.setSelectionRange(originalValue.length, suggestion.length);
-                        } else {
-                            inputElement.setSelectionRange(0, suggestion.length);
-                        }
-                    }
+                    // Like Chrome, put the caret at the end so typing, space and backspace
+                    // continue from the selected suggestion
+                    const end = inputElement.value.length;
+                    inputElement.setSelectionRange(end, end);
 
                     updateSelection();
                     return;
                 }
 
-                // Typing while a suggestion is selected continues from the end of it (like Chrome),
-                // instead of replacing the highlighted part of the suggestion
-                const isPrintable = event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
-                if (selectedIndex >= 0 && isPrintable && !event.isComposing) {
-                    const end = inputElement.value.length;
-                    inputElement.setSelectionRange(end, end);
+                // Like Chrome, Shift+Delete removes the selected history suggestion
+                if (event.key === "Delete" && event.shiftKey && selectedIndex >= 0 && searchHistoryEnabled) {
+                    const suggestion = suggestions[selectedIndex];
+                    if (getHistory().some(item => item.q === suggestion)) {
+                        event.preventDefault();
+                        inputElement.value = originalValue;
+                        removeFromHistory(suggestion);
+                        return;
+                    }
                 }
+            }
+
+            // Like Chrome, arrow down reopens suggestions after they were closed with Escape
+            if (googleAutocomplete && suggestions.length === 0 && event.key === "ArrowDown" && inputElement.value.trim() && !currentBang) {
+                event.preventDefault();
+                fetchSuggestions(inputElement.value.trim());
+                return;
             }
 
             if (event.key == "Enter") {
@@ -315,6 +324,7 @@ function setupSearchBoxes() {
 
         const showAutocomplete = (data, userQuery = "") => {
             const googleSuggestions = data[1] || [];
+            lastGoogleSuggestions = googleSuggestions;
             let historySuggestions = [];
 
             if (searchHistoryEnabled) {
@@ -415,9 +425,12 @@ function setupSearchBoxes() {
                 return;
             }
 
-            // INSTANT: Show history matches immediately while waiting for network
+            // INSTANT: Show history matches immediately while waiting for network, keeping
+            // the previous Google suggestions that still match (like Chrome) instead of
+            // closing the list on every keystroke
             if (searchHistoryEnabled) {
-                showAutocomplete([query, []], query); 
+                const stillMatching = lastGoogleSuggestions.filter(s => s.toLowerCase().startsWith(query.toLowerCase()));
+                showAutocomplete([query, stillMatching], query);
             }
 
             try {
@@ -453,7 +466,12 @@ function setupSearchBoxes() {
             const userTypedValue = inputElement.value; 
             const trimmedValue = userTypedValue.trim();
             originalValue = userTypedValue; // Capture the real typing for the arrow-key logic
-            
+
+            // Editing the text drops the selected suggestion, so Enter searches what's in the box
+            // even before the new suggestions arrive
+            selectedIndex = -1;
+            updateSelection();
+
             // 1. Fetch Google suggestions for exactly what the user typed
             if (googleAutocomplete && !currentBang) {
                 fetchSuggestions(trimmedValue);
