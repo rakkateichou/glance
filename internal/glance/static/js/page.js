@@ -985,8 +985,8 @@ async function setupCalendars() {
     const elems = document.getElementsByClassName("calendar");
     if (elems.length == 0) return;
 
-    // TODO: implement prefetching, currently loads as a nasty waterfall of requests
-    const calendar = await import ('./calendar.js');
+    // animations.js is imported by calendar.js, fetching it alongside avoids a waterfall
+    const [calendar] = await Promise.all([import('./calendar.js'), import('./animations.js')]);
 
     for (let i = 0; i < elems.length; i++)
         calendar.default(elems[i]);
@@ -1005,7 +1005,8 @@ async function setupTodos() {
     const elems = Array.from(document.getElementsByClassName("todo"));
     if (elems.length == 0) return;
 
-    const todo = await import ('./todo.js');
+    // animations.js is imported by todo.js, fetching it alongside avoids a waterfall
+    const [todo] = await Promise.all([import('./todo.js'), import('./animations.js')]);
 
     for (let i = 0; i < elems.length; i++){
         todo.default(elems[i]);

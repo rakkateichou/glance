@@ -2,6 +2,7 @@
 const CACHE_NAME = 'glance-__STATIC_ASSETS_HASH__';
 const STATIC_PREFIX = new URL('static/__STATIC_ASSETS_HASH__/', self.registration.scope).pathname;
 const API_PREFIX = new URL('api/', self.registration.scope).pathname;
+const USER_ASSETS_PREFIX = new URL('assets/', self.registration.scope).pathname;
 
 // How long to wait for the server before showing the cached page instead
 const NAVIGATION_TIMEOUT_MS = 1000;
@@ -35,6 +36,8 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(handleNavigation(event));
     } else if (url.pathname.startsWith(STATIC_PREFIX)) {
         event.respondWith(handleStaticAsset(request));
+    } else if (url.pathname.startsWith(USER_ASSETS_PREFIX)) {
+        event.respondWith(handleUserAsset(event));
     }
 });
 
@@ -78,4 +81,25 @@ async function handleStaticAsset(request) {
         cache.put(request, response.clone());
     }
     return response;
+}
+
+// User assets (custom CSS, scripts in the document head) can block rendering, so serve the
+// cached copy right away and refresh it in the background; edits show up on the next load
+async function handleUserAsset(event) {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(event.request);
+
+    const network = fetch(event.request, { cache: 'no-cache' }).then((response) => {
+        if (response.ok) {
+            return cache.put(event.request, response.clone()).then(() => response);
+        }
+        return response;
+    });
+
+    if (!cached) {
+        return network;
+    }
+
+    event.waitUntil(network.catch(() => {}));
+    return cached;
 }
