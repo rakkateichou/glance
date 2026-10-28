@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -89,6 +90,8 @@ type page struct {
 	} `yaml:"columns"`
 	PrimaryColumnIndex int8       `yaml:"-"`
 	mu                 sync.Mutex `yaml:"-"`
+	// Content rendered in the background by keepWarm, served without waiting on widget updates
+	warmContent atomic.Pointer[[]byte] `yaml:"-"`
 }
 
 func newConfigFromYAML(contents []byte) (*config, error) {

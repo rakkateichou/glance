@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -235,11 +236,13 @@ func newApplication(c *config) (*application, error) {
 	return app, nil
 }
 
-func (p *page) updateOutdatedWidgets() {
+// updateOutdatedWidgets reports whether any widget was updated
+func (p *page) updateOutdatedWidgets() bool {
 	now := time.Now()
 
 	var wg sync.WaitGroup
 	context := context.Background()
+	updated := false
 
 	for w := range p.HeadWidgets {
 		widget := p.HeadWidgets[w]
@@ -248,6 +251,7 @@ func (p *page) updateOutdatedWidgets() {
 			continue
 		}
 
+		updated = true
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -263,6 +267,7 @@ func (p *page) updateOutdatedWidgets() {
 				continue
 			}
 
+			updated = true
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -272,6 +277,43 @@ func (p *page) updateOutdatedWidgets() {
 	}
 
 	wg.Wait()
+	return updated
+}
+
+// keepWarm updates outdated widgets in the background and keeps a rendered copy of the
+// page's content, so that page requests (e.g. opening a new tab) never wait on slow
+// widget updates such as remote server stats
+func (p *page) keepWarm(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		p.warm()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (p *page) warm() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !p.updateOutdatedWidgets() && p.warmContent.Load() != nil {
+		return
+	}
+
+	var contentBytes bytes.Buffer
+	if err := pageContentTemplate.Execute(&contentBytes, templateData{Page: p}); err != nil {
+		slog.Error("Failed to render page content in the background", "page", p.Title, "error", err)
+		return
+	}
+
+	content := contentBytes.Bytes()
+	p.warmContent.Store(&content)
 }
 
 func (a *application) resolveUserDefinedAssetPath(path string) string {
@@ -326,18 +368,22 @@ func (a *application) handlePageRequest(w http.ResponseWriter, r *http.Request) 
 	}
 	a.populateTemplateRequestData(&data.Request, r)
 
-	func() {
-		page.mu.Lock()
-		defer page.mu.Unlock()
+	if content := page.warmContent.Load(); content != nil {
+		data.InitialContent = template.HTML(*content)
+	} else {
+		func() {
+			page.mu.Lock()
+			defer page.mu.Unlock()
 
-		page.updateOutdatedWidgets()
+			page.updateOutdatedWidgets()
 
-		var contentBytes bytes.Buffer
-		err := pageContentTemplate.Execute(&contentBytes, data)
-		if err == nil {
-			data.InitialContent = template.HTML(contentBytes.String())
-		}
-	}()
+			var contentBytes bytes.Buffer
+			err := pageContentTemplate.Execute(&contentBytes, data)
+			if err == nil {
+				data.InitialContent = template.HTML(contentBytes.String())
+			}
+		}()
+	}
 
 	var responseBytes bytes.Buffer
 	err := pageTemplate.Execute(&responseBytes, data)
@@ -368,13 +414,17 @@ func (a *application) handlePageContentRequest(w http.ResponseWriter, r *http.Re
 	var err error
 	var responseBytes bytes.Buffer
 
-	func() {
-		page.mu.Lock()
-		defer page.mu.Unlock()
+	if content := page.warmContent.Load(); content != nil {
+		responseBytes.Write(*content)
+	} else {
+		func() {
+			page.mu.Lock()
+			defer page.mu.Unlock()
 
-		page.updateOutdatedWidgets()
-		err = pageContentTemplate.Execute(&responseBytes, pageData)
-	}()
+			page.updateOutdatedWidgets()
+			err = pageContentTemplate.Execute(&responseBytes, pageData)
+		}()
+	}
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -515,7 +565,13 @@ func (a *application) server() (func() error, func() error) {
 		Handler: mux,
 	}
 
+	warmCtx, stopWarming := context.WithCancel(context.Background())
+
 	start := func() error {
+		for i := range a.Config.Pages {
+			go a.Config.Pages[i].keepWarm(warmCtx)
+		}
+
 		log.Printf("Starting server on %s:%d (base-url: \"%s\", assets-path: \"%s\")\n",
 			a.Config.Server.Host,
 			a.Config.Server.Port,
@@ -531,6 +587,7 @@ func (a *application) server() (func() error, func() error) {
 	}
 
 	stop := func() error {
+		stopWarming()
 		return server.Close()
 	}
 
